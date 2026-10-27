@@ -1,0 +1,50 @@
+"use client";
+
+import { useState, useTransition } from "react";
+import type { FormState } from "@/lib/action";
+import { activateVersion, deleteDocument } from "../actions";
+
+export function ActivateButton({ app, documentId, versionId }: { app: string; documentId: string; versionId: string }) {
+  const [state, setState] = useState<FormState>({});
+  const [pending, start] = useTransition();
+  return (
+    <>
+      <button
+        type="button"
+        className="secondary"
+        disabled={pending}
+        onClick={() =>
+          start(async () => {
+            setState(await activateVersion(app, documentId, versionId));
+          })
+        }
+      >
+        Aktifkan
+      </button>
+      {state.error && (
+        <div className="error" role="alert">
+          {state.error}
+        </div>
+      )}
+    </>
+  );
+}
+
+export function DeleteButton({ app, documentId }: { app: string; documentId: string }) {
+  const [pending, start] = useTransition();
+  return (
+    <button
+      type="button"
+      className="danger"
+      disabled={pending}
+      onClick={() => {
+        if (!window.confirm("Hapus dokumen ini dari basis pengetahuan? Versi lama tetap disimpan untuk audit.")) return;
+        start(async () => {
+          await deleteDocument(app, documentId);
+        });
+      }}
+    >
+      Hapus
+    </button>
+  );
+}
