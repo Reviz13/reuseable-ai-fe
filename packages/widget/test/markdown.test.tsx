@@ -28,6 +28,16 @@ describe("renderMarkdown", () => {
   it("renders basic markdown", () => {
     expect(renderMarkdown("**a**")).toContain("<strong>a</strong>");
   });
+  it("raw HTML in model output renders as text, inline and as a block (M1)", () => {
+    const host = document.createElement("div");
+    host.innerHTML = renderMarkdown("Profit 9<span></span>.999.000 dan <b>tebal</b>");
+    expect(host.querySelector("span")).toBeNull();
+    expect(host.querySelector("b")).toBeNull();
+    expect(host.textContent).toContain("9<span></span>.999.000");
+    host.innerHTML = renderMarkdown("<div>\nblok <i>x</i>\n</div>");
+    expect(host.querySelector("div")).toBeNull();
+    expect(host.textContent).toContain("<div>");
+  });
 });
 
 describe("sanitization end to end", () => {

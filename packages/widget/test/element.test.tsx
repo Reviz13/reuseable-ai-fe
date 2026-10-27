@@ -277,6 +277,18 @@ describe("chat flow", () => {
     expect(q(el, ".launcher img[data-active]")!.getAttribute("data-state")).toBe("sad");
   });
 
+  it("a stream that ends without done or error shows the connection copy and a sad avatar (S9)", async () => {
+    chatResponses.push(() => sseResponse([{ type: "state", avatar: "talking" }, { type: "token", text: "Sebagian" }]).res);
+    const el = mount();
+    const errs: CustomEvent[] = [];
+    el.addEventListener("ai-error", (e) => errs.push(e as CustomEvent));
+    await openPanel(el);
+    await send(el, "hi");
+    await waitFor(() => expect(list(el).textContent).toContain("Koneksi bermasalah, coba lagi."));
+    expect(q(el, ".launcher img[data-active]")!.getAttribute("data-state")).toBe("sad");
+    expect(errs[0]!.detail).toEqual({ code: "NETWORK" });
+  });
+
   it("renders SSE error events and marks the avatar sad", async () => {
     chatResponses.push(
       () => sseResponse([{ type: "error", code: "LLM_UNAVAILABLE", message: "LLM down" }]).res,

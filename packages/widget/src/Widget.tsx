@@ -131,6 +131,7 @@ export function Widget(props: WidgetProps) {
       const ac = new AbortController();
       abortRef.current = ac;
       let answer = "";
+      let settled = false;
       try {
         await client.chat(
           { message: text, conversation_id: conversationId.current },
@@ -151,11 +152,13 @@ export function Widget(props: WidgetProps) {
                 );
                 break;
               case "done":
+                settled = true;
                 conversationId.current = ev.conversation_id;
                 patch((m) => ({ ...m, messageId: ev.message_id }));
                 latest.current.onMessage({ message_id: ev.message_id, text: answer });
                 break;
               case "error":
+                settled = true;
                 fail(ev.code, ev.message);
                 break;
               default:
@@ -164,6 +167,8 @@ export function Widget(props: WidgetProps) {
           },
           ac.signal,
         );
+        // S9: a stream that closes without done or error was cut off; show it as a network failure.
+        if (!settled && !ac.signal.aborted) fail("NETWORK", "");
       } catch (e) {
         if (isAbort(e) || ac.signal.aborted) {
           setAvatar("idle");
