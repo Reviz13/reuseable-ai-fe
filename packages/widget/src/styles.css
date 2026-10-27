@@ -1,0 +1,89 @@
+:host {
+  all: initial;
+}
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+.root {
+  --accent: var(--ai-accent, var(--ai-theme-accent, #6d4aff));
+  position: fixed;
+  z-index: var(--ai-z, 2147483000);
+  display: flex;
+  gap: 12px;
+  font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  color: #1f2330;
+}
+.root.bottom-right { right: var(--ai-inset-x, 20px); bottom: var(--ai-inset-y, 20px); flex-direction: column; align-items: flex-end; }
+.root.bottom-left { left: var(--ai-inset-x, 20px); bottom: var(--ai-inset-y, 20px); flex-direction: column; align-items: flex-start; }
+.root.top-right { right: var(--ai-inset-x, 20px); top: var(--ai-inset-y, 20px); flex-direction: column-reverse; align-items: flex-end; }
+.root.top-left { left: var(--ai-inset-x, 20px); top: var(--ai-inset-y, 20px); flex-direction: column-reverse; align-items: flex-start; }
+.root.dragging { user-select: none; }
+.root.dragging .launcher { cursor: grabbing; }
+
+button { font: inherit; color: inherit; }
+
+.launcher {
+  width: 56px;
+  height: 56px;
+  padding: 0;
+  border: 2px solid var(--accent);
+  border-radius: 50%;
+  background: #fff;
+  cursor: grab;
+  touch-action: none;
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+  flex: none;
+}
+.launcher:focus-visible, .panel button:focus-visible, .panel input:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+.avatar { position: relative; width: 100%; height: 100%; }
+.avatar img { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; pointer-events: none; }
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  width: 360px;
+  max-width: calc(100vw - 2 * var(--ai-inset-x, 20px));
+  height: 520px;
+  max-height: calc(100vh - 120px);
+  background: #fff;
+  border: 1px solid #d9dce6;
+  border-radius: 14px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.25);
+  overflow: hidden;
+}
+.head { display: flex; align-items: center; justify-content: space-between; padding: 10px 14px; background: var(--accent); color: #fff; }
+.title { font-weight: 600; }
+.close { border: 0; background: transparent; color: #fff; font-size: 22px; line-height: 1; cursor: pointer; padding: 0 4px; }
+.log { flex: 1; overflow-y: auto; padding: 12px; display: flex; flex-direction: column; gap: 10px; background: #f6f7fb; }
+.msg { max-width: 88%; padding: 8px 12px; border-radius: 12px; overflow-wrap: anywhere; }
+.msg.user { align-self: flex-end; background: var(--accent); color: #fff; }
+.msg.assistant { align-self: flex-start; background: #fff; border: 1px solid #e1e4ee; }
+.msg p { margin: 0 0 6px; }
+.msg p:last-child { margin-bottom: 0; }
+.msg .plain { white-space: pre-wrap; }
+.msg a { color: var(--accent); }
+.msg pre { overflow-x: auto; background: #f0f1f6; padding: 6px 8px; border-radius: 6px; }
+.msg table { border-collapse: collapse; }
+.msg th, .msg td { border: 1px solid #d9dce6; padding: 2px 6px; }
+.err { color: #b3261e; font-weight: 500; }
+.chips { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.chip { font-size: 12px; padding: 2px 8px; border-radius: 999px; background: #eceafd; color: #3b2fa0; border: 1px solid #d3cdfa; }
+.feedback { display: flex; gap: 6px; margin-top: 6px; }
+.fb { border: 1px solid #d9dce6; background: #fff; border-radius: 8px; cursor: pointer; padding: 2px 8px; }
+.fb[aria-pressed="true"] { background: #eceafd; border-color: var(--accent); }
+.fb:disabled:not([aria-pressed="true"]) { opacity: 0.5; cursor: default; }
+.form { display: flex; gap: 8px; padding: 10px; border-top: 1px solid #e1e4ee; background: #fff; }
+.form input { flex: 1; min-width: 0; padding: 8px 10px; border: 1px solid #c9cddb; border-radius: 8px; font: inherit; }
+.form input:disabled { background: #f0f1f6; }
+.send { padding: 8px 14px; border: 0; border-radius: 8px; background: var(--accent); color: #fff; cursor: pointer; font-weight: 600; }
+.send:disabled { opacity: 0.55; cursor: default; }
+
+@media (prefers-reduced-motion: reduce) {
+  * { transition: none !important; animation: none !important; }
+}
