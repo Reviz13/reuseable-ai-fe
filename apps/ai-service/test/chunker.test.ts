@@ -67,6 +67,32 @@ describe("chunkText", () => {
   });
 });
 
+describe("chunkText heading edge cases", () => {
+  for (const [name, nl] of [["LF", "\n"], ["CRLF", "\r\n"]] as const) {
+    it(`keeps un-punctuated numbered SOP steps as body text (${name})`, () => {
+      const chunks = chunkText(["PROSEDUR KASIR", "", "1. Buka menu", "2. Pilih produk", "3. Tekan bayar", ""].join(nl));
+      expect(chunks.length).toBeGreaterThan(0);
+      for (const c of chunks) expect(c.heading).toBe("PROSEDUR KASIR");
+      const all = chunks.map((c) => c.content).join("\n");
+      for (const step of ["Buka menu", "Pilih produk", "Tekan bayar"]) expect(all).toContain(step);
+    });
+
+    it(`emits a chunk for a heading with no body (${name})`, () => {
+      const chunks = chunkText(`## Kontak Support${nl}`);
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0]!.content).toContain("Kontak Support");
+      expect(chunks[0]!.heading).toBe("Kontak Support");
+    });
+
+    it(`still treats a lone numbered heading as a heading (${name})`, () => {
+      const chunks = chunkText(`2. Penutupan Shift${nl}${nl}Kasir menghitung uang tunai.${nl}`);
+      expect(chunks).toHaveLength(1);
+      expect(chunks[0]!.heading).toBe("2. Penutupan Shift");
+      expect(chunks[0]!.content).toBe("Kasir menghitung uang tunai.");
+    });
+  }
+});
+
 describe("hash embedder", () => {
   it("is 384-dim, normalized, deterministic; zero for empty", async () => {
     const e = createHashEmbedder();

@@ -13,6 +13,8 @@ export interface ChunkOpts {
 const tokens = (s: string): number => Math.ceil(s.length / 4);
 const splitSentences = (s: string): string[] => s.split(/(?<=[.!?])\s+/).filter((x) => x.length > 0);
 
+const NUMBERED = /^\s*(\d+[.)]|\d+\.\d+)/;
+
 /** Returns the heading text if the line is a heading, else null. */
 function headingOf(line: string): string | null {
   const t = line.trim();
@@ -68,8 +70,18 @@ export function chunkText(
 
   // 1. sections by heading
   const sections: Array<{ heading?: string; lines: string[] }> = [{ lines: [] }];
-  for (const line of text.replace(/\r\n?/g, "\n").split("\n")) {
-    const h = headingOf(line);
+  const lines = text.replace(/\r\n?/g, "\n").split("\n");
+  const neighbourIsNumbered = (from: number, step: 1 | -1): boolean => {
+    for (let j = from + step; j >= 0 && j < lines.length; j += step) {
+      if (lines[j]!.trim()) return NUMBERED.test(lines[j]!);
+    }
+    return false;
+  };
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    let h = headingOf(line);
+    // A numbered line next to another numbered line is a list item (body text), not a heading.
+    if (h !== null && NUMBERED.test(line) && (neighbourIsNumbered(i, -1) || neighbourIsNumbered(i, 1))) h = null;
     if (h !== null) sections.push({ heading: h, lines: [] });
     else sections[sections.length - 1]!.lines.push(line);
   }
@@ -92,9 +104,15 @@ export function chunkText(
         units.push(...splitOversized(para, room));
       } else units.push(para);
     }
-    if (units.length === 0) continue;
+    // Never drop text: a heading with no body becomes a chunk holding the heading itself.
+    if (units.length === 0) {
+      if (section.heading !== undefined) emit(section.heading, section.heading);
+      continue;
+    }
 
-    // 3. pack up to maxTokens; each new chunk starts with an overlap tail from the same section
+    // 3. pack up to maxTokens; each new chunk starts with an overlap tail from the same section.
+    // The overlap is best-effort: the tail is trimmed (possibly to nothing) whenever tail + next
+    // unit would exceed maxTokens, because the hard <=500 token ceiling wins over overlap.
     let cur = "";
     for (const unit of units) {
       if (cur && tokens(`${cur}\n\n${unit}`) <= maxTokens) {
