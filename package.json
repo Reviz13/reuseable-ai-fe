@@ -4,9 +4,20 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck"
+    "typecheck": "pnpm -r typecheck",
+    "build:widget": "pnpm --filter widget build",
+    "dev": "pnpm build:widget && concurrently -k -n pos,ai,studio -c yellow,cyan,magenta \"dotenv -e .env -- pnpm --filter mock-pos dev\" \"dotenv -e .env -- pnpm --filter ai-service dev\" \"dotenv -e .env -- pnpm --filter studio dev\"",
+    "seed:admin": "dotenv -e .env -- tsx scripts/seed-admin.ts",
+    "seed:avatars": "dotenv -e .env -- tsx scripts/seed-avatars.ts"
   },
   "devDependencies": {
+    "@supabase/supabase-js": "^2.118.0",
+    "@types/node": "^22.0.0",
+    "@types/pg": "^8.11.0",
+    "concurrently": "^10.0.6",
+    "dotenv-cli": "^11.0.0",
+    "pg": "^8.13.0",
+    "tsx": "^4.19.0",
     "typescript": "^5.6.0",
     "vitest": "^2.1.0"
   }
