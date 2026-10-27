@@ -49,6 +49,15 @@ async function newVersion(db: Db, documentId: string, checksum: string, sourcePa
   return row!;
 }
 
+/** Parses a FAQ chunk: Q: question, newline, A: answer (split on the first newline + "A: "); null when the shape is not recognised. */
+export function parseFaq(content: string): { question: string; answer: string } | null {
+  if (!content.startsWith("Q: ")) return null;
+  const rest = content.slice(3);
+  const i = rest.indexOf("\nA: ");
+  if (i < 0) return null;
+  return { question: rest.slice(0, i), answer: rest.slice(i + 4) };
+}
+
 function safeName(filename: string): string {
   return filename.replace(/[^\w.\-]+/g, "_") || "file";
 }
@@ -101,6 +110,14 @@ export function registerKnowledgeRoutes(app: FastifyInstance): void {
          from document_versions v where v.document_id = $1 order by v.version`,
         [doc.id],
       );
+      let faq: { question: string; answer: string } | null | undefined;
+      if (doc.kind === "faq") {
+        const targetId = doc.active_version_id ?? (versions as { id: string }[]).at(-1)?.id;
+        const [chunk] = targetId
+          ? await db.query<{ content: string }>("select content from chunks where version_id = $1 order by ord limit 1", [targetId])
+          : [];
+        faq = chunk ? parseFaq(chunk.content) : null;
+      }
       return {
         id: doc.id,
         kind: doc.kind,
@@ -110,6 +127,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance): void {
         active_version: active?.version ?? null,
         created_at: meta!.created_at,
         versions,
+        ...(faq !== undefined ? { faq } : {}),
       };
     });
 

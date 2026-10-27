@@ -3,6 +3,7 @@ import { aiAdmin } from "@/lib/aiAdmin";
 import { ForbiddenError } from "@/lib/errors";
 import { parseApp, requireAdminSession } from "@/lib/guard";
 import { logout } from "./actions";
+import { SignOutOnMount } from "./SignOutOnMount";
 
 export default async function AdminLayout({
   children,
@@ -43,9 +44,13 @@ export default async function AdminLayout({
       {allowed ? (
         children
       ) : (
-        <p className="card error" role="alert">
-          Akun ini tidak memiliki akses ke {app}
-        </p>
+        <div className="card">
+          <SignOutOnMount app={app} />
+          <p className="error" role="alert">
+            Akun ini tidak memiliki akses ke {app}
+          </p>
+          <Link href="/login">Kembali ke halaman masuk</Link>
+        </div>
       )}
     </div>
   );

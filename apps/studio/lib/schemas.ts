@@ -14,6 +14,7 @@ export type DocumentRow = z.infer<typeof DocumentRowSchema>;
 export const DocumentListSchema = z.array(DocumentRowSchema);
 
 export const DocumentDetailSchema = DocumentRowSchema.extend({
+  faq: z.object({ question: z.string(), answer: z.string() }).nullable().optional(),
   versions: z.array(
     z.object({
       id: z.string(),

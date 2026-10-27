@@ -38,6 +38,20 @@ export async function addFaq(app: string, _prev: FormState, formData: FormData):
   });
 }
 
+export async function updateFaq(app: string, documentId: string, _prev: FormState, formData: FormData): Promise<FormState> {
+  const appId = parseApp(app);
+  const state = await runAction(async () => {
+    await aiAdmin(`/admin/${appId}/faqs/${encodeURIComponent(documentId)}`, {
+      method: "PUT",
+      body: JSON.stringify({ question: String(formData.get("question") ?? ""), answer: String(formData.get("answer") ?? "") }),
+    });
+    return { ok: true, message: "FAQ diperbarui." };
+  });
+  revalidatePath(`/admin/${appId}/knowledge/${documentId}`);
+  revalidatePath(`/admin/${appId}/knowledge`);
+  return state;
+}
+
 export async function activateVersion(app: string, documentId: string, versionId: string): Promise<FormState> {
   const appId = parseApp(app);
   const state = await runAction(

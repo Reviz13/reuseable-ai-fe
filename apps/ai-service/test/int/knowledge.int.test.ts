@@ -159,6 +159,20 @@ describe("knowledge admin api", () => {
     ]);
   });
 
+  it("faq detail returns parsed question and answer, following updates", async () => {
+    const res = await send("POST", "/admin/pos/faqs", { question: "Bisa bayar QRIS?", answer: "Bisa.\nA: juga transfer." });
+    const { id } = res.json() as { id: string };
+    const get1 = await get(`/admin/pos/documents/${id}`);
+    expect((get1.json() as { faq: unknown }).faq).toEqual({ question: "Bisa bayar QRIS?", answer: "Bisa.\nA: juga transfer." });
+    await send("PUT", `/admin/pos/faqs/${id}`, { question: "Bisa bayar QRIS?", answer: "Ya, semua QRIS." });
+    const get2 = await get(`/admin/pos/documents/${id}`);
+    expect((get2.json() as { faq: unknown }).faq).toEqual({ question: "Bisa bayar QRIS?", answer: "Ya, semua QRIS." });
+    const [file] = (await get("/admin/pos/documents")).json() as { id: string; kind: string }[];
+    if (file && file.kind === "file") {
+      expect((await get(`/admin/pos/documents/${file.id}`).then((r) => r.json())) as object).not.toHaveProperty("faq");
+    }
+  });
+
   it("delete clears active version, keeps versions, removes from retrieval", async () => {
     const r = await send("POST", "/admin/pos/faqs", { question: "Hapus saya?", answer: "Kolibri unik." });
     const { id } = r.json() as { id: string };

@@ -4,7 +4,7 @@ import { useRouter } from "next/navigation";
 import { useActionState, useEffect } from "react";
 import { FieldIssues, FormMessages } from "@/components/FormMessages";
 import type { FormState } from "@/lib/action";
-import { addFaq, uploadDocument } from "./actions";
+import { addFaq, updateFaq, uploadDocument } from "./actions";
 
 const EMPTY: FormState = {};
 
@@ -50,6 +50,34 @@ export function FaqForm({ app }: { app: string }) {
       <p>
         <button type="submit" disabled={pending}>
           {pending ? "Menyimpan..." : "Tambah FAQ"}
+        </button>
+      </p>
+    </form>
+  );
+}
+
+export function EditFaqForm({
+  app,
+  documentId,
+  faq,
+}: {
+  app: string;
+  documentId: string;
+  faq: { question: string; answer: string };
+}) {
+  const [state, action, pending] = useActionState(updateFaq.bind(null, app, documentId), EMPTY);
+  return (
+    <form action={action}>
+      <label htmlFor="question">Pertanyaan</label>
+      <input id="question" name="question" type="text" required maxLength={500} defaultValue={faq.question} />
+      <FieldIssues state={state} field="question" />
+      <label htmlFor="answer">Jawaban</label>
+      <textarea id="answer" name="answer" required maxLength={5000} defaultValue={faq.answer} />
+      <FieldIssues state={state} field="answer" />
+      <FormMessages state={state} />
+      <p>
+        <button type="submit" disabled={pending}>
+          {pending ? "Menyimpan..." : "Simpan perubahan"}
         </button>
       </p>
     </form>

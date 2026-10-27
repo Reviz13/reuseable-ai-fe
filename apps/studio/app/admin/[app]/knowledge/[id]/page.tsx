@@ -4,7 +4,7 @@ import { aiAdmin } from "@/lib/aiAdmin";
 import { AdminApiError } from "@/lib/errors";
 import { parseApp } from "@/lib/guard";
 import { DocumentDetailSchema } from "@/lib/schemas";
-import { UploadForm } from "../forms";
+import { EditFaqForm, UploadForm } from "../forms";
 import { ActivateButton, DeleteButton } from "./controls";
 
 export const dynamic = "force-dynamic";
@@ -56,6 +56,12 @@ export default async function DocumentPage({ params }: { params: Promise<{ app: 
           </tbody>
         </table>
       </section>
+      {doc.kind === "faq" && doc.faq && (
+        <section className="card">
+          <h2>Edit FAQ</h2>
+          <EditFaqForm app={app} documentId={doc.id} faq={doc.faq} key={doc.active_version_id ?? doc.id} />
+        </section>
+      )}
       {doc.kind === "file" && (
         <section className="card">
           <h2>Versi baru</h2>
