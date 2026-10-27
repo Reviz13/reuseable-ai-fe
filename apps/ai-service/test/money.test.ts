@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { formatRupiah, parseRupiahAmounts } from "../src/money.js";
+import { CURRENCY_MARKER_RE, formatRupiah, parseRupiahAmounts, parseRupiahAmountsDetailed } from "../src/money.js";
 
 describe("formatRupiah", () => {
   it.each([
@@ -63,4 +63,35 @@ describe("parseRupiahAmounts", () => {
   it("does not treat words ending in rp as a currency prefix", () => {
     expect(parseRupiahAmounts("Corp 5")).toEqual([]);
   });
+});
+
+describe("parseRupiahAmounts: Ruling 27 vocabulary", () => {
+  it.each([
+    ["1,5 milyar", 1500000000],
+    ["2 milyar", 2000000000],
+    ["1,2 triliun", 1200000000000],
+    ["totalRp2.550.000", 2550000],
+    ["profitIDR2.550.000", 2550000],
+    ["2550000IDR", 2550000],
+    ["2.550.000Rp", 2550000],
+  ])("parses %s as %s", (s, v) => expect(parseRupiahAmounts(s)).toEqual([v]));
+
+  it("milyar and triliun are scaled (guardrail tolerance applies)", () => {
+    expect(parseRupiahAmountsDetailed("1,5 milyar")[0]!.scaled).toBe(true);
+    expect(parseRupiahAmountsDetailed("1 triliun")[0]!.scaled).toBe(true);
+  });
+
+  it.each([["Corp 5"], ["corp5"], ["terbaru"], ["5 terbaru"], ["312 transaksi"], ["10k"]])("%s is not an amount", (s) =>
+    expect(parseRupiahAmounts(s)).toEqual([]),
+  );
+});
+
+describe("CURRENCY_MARKER_RE", () => {
+  it.each([["totalRp2.550.000"], ["2550000IDR"], ["2.550.000Rp"], ["1,5 milyar"], ["1 triliun"], ["Rp"], ["5 juta"]])(
+    "%s trips the sentinel",
+    (s) => expect(CURRENCY_MARKER_RE.test(s)).toBe(true),
+  );
+  it.each([["terbaru"], ["Corp sudah"], ["serba ada"], ["jutawan"]])("%s does not", (s) =>
+    expect(CURRENCY_MARKER_RE.test(s)).toBe(false),
+  );
 });

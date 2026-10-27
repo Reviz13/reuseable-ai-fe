@@ -162,9 +162,13 @@ export async function runChat(
       }
       if (signal.aborted) return null;
 
-      sentinel.flush();
-      if (calls.length === 0) break;
-      sentinel.startBuffering(); // every later word may quote a tool result
+      if (calls.length === 0) {
+        sentinel.flush();
+        break;
+      }
+      // No flush: a held tail ("Profit R", "9.999.000 ") may continue after the tool call, so it
+      // joins the held text and is guardrailed together with everything after it.
+      sentinel.startBuffering();
 
       messages.push({ role: "assistant", tool_calls: calls });
       for (const call of calls) {
@@ -185,21 +189,24 @@ export async function runChat(
     throw err;
   }
 
+  // Replacement copy is a new paragraph when text already streamed, never glued to the preamble.
+  const emitReplacement = (copy: string) => emitText(text.trim() ? `\n\n${copy}` : copy);
   const held = sentinel.held;
   if (held) {
     if (profitResults.length > 0) {
       const g = applyProfitGuardrail(held, profitResults);
       guardrailReplaced = g.replaced;
-      emitText(g.text);
+      if (g.replaced) emitReplacement(g.text);
+      else emitText(g.text);
     } else if (parseRupiahAmounts(held).length > 0) {
       guardrailReplaced = noDataReplaced = true;
-      emitText(failureCopy(toolCalls));
+      emitReplacement(failureCopy(toolCalls));
     } else {
       emitText(held);
     }
   }
   const empty = text.trim() === "";
-  if (empty) emitText(EMPTY);
+  if (empty) emitReplacement(EMPTY);
 
   const notFound = text.includes(NOT_FOUND);
   const citations = toolCalls.length === 0 && !notFound ? citationsFrom(relevant) : [];

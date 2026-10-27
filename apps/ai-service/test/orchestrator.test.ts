@@ -353,8 +353,12 @@ describe("runChat rupiah sentinel and failed-tool guardrail (Ruling 25)", () => 
     const all = tokens(s.events).join("");
     expect(all).not.toContain("2.550.000");
     expect(all).toContain("Profit minggu ini ");
-    expect(r!.text).toBe(`Profit minggu ini ${NO_DATA}`);
-    expect(tokens(s.events).at(-1)).toBe(NO_DATA);
+    expect(r!.text).toBe(`Profit minggu ini 
+
+${NO_DATA}`);
+    expect(tokens(s.events).at(-1)).toBe(`
+
+${NO_DATA}`); // separated from the streamed preamble
     expect(r!.guardrailReplaced).toBe(true);
     expect(r!.avatarFinal).toBe("sad");
   });
@@ -382,8 +386,9 @@ describe("runChat rupiah sentinel and failed-tool guardrail (Ruling 25)", () => 
     const s = setup({ llm });
     const r = await runChat(s.deps, input(), s.emit, fresh());
     const t = tokens(s.events);
-    expect(t.slice(0, 3)).toEqual(["Saya cek ", "dulu ", "ya."]); // released at whitespace boundaries
-    expect(t.at(-1)).toContain("Profit minggu ini Rp2.550.000.");
+    // Released at whitespace boundaries; the unfinished word before the tool call joins the held text.
+    expect(t.slice(0, 2)).toEqual(["Saya cek ", "dulu "]);
+    expect(t.at(-1)).toContain("ya.Profit minggu ini Rp2.550.000.");
     expect(r!.guardrailReplaced).toBe(false);
     expect(r!.avatarFinal).toBe("happy");
   });
@@ -498,5 +503,101 @@ describe("normalizeHistory", () => {
       new AbortController().signal,
     );
     expect(llm.calls[0]!.messages).toEqual([{ role: "user", content: "lama\n\nbaru" }]);
+  });
+});
+
+describe("runChat: figures split across a tool boundary (fix round 2)", () => {
+  const fresh = () => new AbortController().signal;
+  const upstreamDown = async () => {
+    throw new UpstreamError("down");
+  };
+  const noTokenContains = (events: SseEvent[], needle: string | RegExp) => {
+    for (const t of tokens(events)) {
+      if (typeof needle === "string") expect(t).not.toContain(needle);
+      else expect(t).not.toMatch(needle);
+    }
+  };
+
+  it("'Profit R' | tool (UPSTREAM) | 'p9.999.000 ya.' -> never emitted, UPSTREAM copy", async () => {
+    const llm = createFakeAdapter([
+      [text("Profit R"), call({ period: "this_week" }), end("tool_use")],
+      [text("p9.999.000 ya."), end()],
+    ]);
+    const s = setup({ llm, getProfit: upstreamDown });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    noTokenContains(s.events, /\d/);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).toBe(`Profit \n\n${UPSTREAM}`);
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("'Profit 9.999.000 ' | tool (UPSTREAM) | 'juta ya.' -> never emitted, replaced", async () => {
+    const llm = createFakeAdapter([
+      [text("Profit 9.999.000 "), call({ period: "this_week" }), end("tool_use")],
+      [text("juta ya."), end()],
+    ]);
+    const s = setup({ llm, getProfit: upstreamDown });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    noTokenContains(s.events, "9.999.000");
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).not.toContain("9.999.000");
+  });
+
+  it("'Profit 9.999.000' | tool (ok, 2.550.000) | ' juta ya.' -> guardrail template, never the wrong figure", async () => {
+    const llm = createFakeAdapter([
+      [text("Profit 9.999.000"), call({ period: "this_week" }), end("tool_use")],
+      [text(" juta ya."), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    noTokenContains(s.events, "9.999.000");
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(tokens(s.events).at(-1)!.startsWith("\n\nProfit minggu ini (2026-10-26 s.d. 2026-10-27): Rp2.550.000.")).toBe(true);
+  });
+
+  it("replacement copy after a streamed preamble is separated by a blank line", async () => {
+    const llm = createFakeAdapter([
+      [text("Baik, "), call({ period: "today" }), end("tool_use")],
+      [text("Profit Rp1.000.000"), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("cashier"), s.emit, fresh());
+    expect(tokens(s.events)).toEqual(["Baik, ", `\n\n${FORBIDDEN}`]);
+    expect(r!.text).toBe(`Baik, \n\n${FORBIDDEN}`);
+  });
+
+  it("non-replaced held text and copy with nothing streamed before get no prefix", async () => {
+    const llm = createFakeAdapter([
+      [call({ period: "today" }), end("tool_use")],
+      [text("Profit Rp1.000.000"), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("cashier"), s.emit, fresh());
+    expect(r!.text).toBe(FORBIDDEN);
+  });
+});
+
+describe("runChat: Ruling 27 vocabulary reaches the guardrail", () => {
+  const fresh = () => new AbortController().signal;
+  const forms = [["totalRp9.999.000"], ["9999000IDR"], ["9.999.000Rp"], ["1,5 milyar"], ["2 triliun"]];
+
+  it.each(forms)("%s with no tool call -> NO_DATA, never emitted", async (form) => {
+    const llm = createFakeAdapter([[text("Profit kita "), text(form), text(" ya."), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    for (const t of tokens(s.events)) expect(t).not.toContain(form);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text.endsWith(NO_DATA)).toBe(true);
+  });
+
+  it.each(forms)("%s contradicting the tool result -> template", async (form) => {
+    const llm = createFakeAdapter([
+      [call({ period: "this_week" }), end("tool_use")],
+      [text(`Profit minggu ini ${form}.`), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    for (const t of tokens(s.events)) expect(t).not.toContain(form);
+    expect(r!.guardrailReplaced).toBe(true);
   });
 });
