@@ -3,6 +3,9 @@ import type { ProfitReport } from "@ai/contracts";
 import {
   CURRENCY_MARKER_RE,
   CURRENCY_TAIL_RE,
+  collectCandidateAmounts,
+  isProfitContext,
+  sentinelTrips,
   normalizeForGuardrail,
   parseGuardrailAmounts,
 } from "../src/money.js";
@@ -92,5 +95,71 @@ describe("applyProfitGuardrail with normalization", () => {
     expect(r.replaced).toBe(true);
     expect(r.text.match(/Profit minggu ini \(/g)).toHaveLength(1);
     expect(r.text.match(/Catatan:/g)).toHaveLength(1);
+  });
+});
+
+// Ruling 29: unicode/markdown normalization and grouped-number candidates.
+describe("Ruling 29 normalization", () => {
+  it.each([
+    ["Rp ９.９９９.０００", "Rp 9.999.000"],
+    ["Ｒｐ 9.999.000", "Rp 9.999.000"],
+    ["Rp​9.999.000﻿", "Rp9.999.000"],
+    ["Rp −9.999.000", "Rp -9.999.000"],
+    ["**Rp** 9.999.000", "Rp 9.999.000"],
+    ["Rp~~9.999.000~~", "Rp9.999.000"],
+    ["`Rp9.999.000`", "Rp9.999.000"],
+    ["_Rp_ 9.999.000", "Rp 9.999.000"],
+  ])("normalizes %j to %j", (a, b) => expect(normalizeForGuardrail(a)).toBe(b));
+
+  it.each([
+    "Profit Rp ９.９９９.０００.",
+    "Profit Ｒｐ 9.999.000.",
+    "Profit Rp​9.999.000.",
+    "Profit **Rp** 9.999.000.",
+    "Profit Rp~~9.999.000~~.",
+    "Profit Rp −9.999.000.",
+  ])("%j parses to an amount without profit context", (s) =>
+    expect(parseGuardrailAmounts(s).map((a) => Math.abs(a.value))).toEqual([9999000]),
+  );
+
+  it("sentinel trip covers grouped numbers and normalized markers", () => {
+    for (const s of ["maksimal 1.000 item", "12,500", "Ｒｐ", "R​p9", "９.９９９", "**Rp**"]) {
+      expect(sentinelTrips(s)).toBe(true);
+    }
+    for (const s of ["312 transaksi", "naik 12%", "2026-10-20", "jam 10.30", "terpakai"]) expect(sentinelTrips(s)).toBe(false);
+  });
+});
+
+describe("isProfitContext", () => {
+  it("matches the profit vocabulary or a get_profit call", () => {
+    for (const m of ["Profit minggu ini berapa?", "laba bulan lalu", "OMZET hari ini", "berapa HPP", "margin?", "penjualan kemarin"]) {
+      expect(isProfitContext(m, false)).toBe(true);
+    }
+    expect(isProfitContext("Bagaimana cara refund?", false)).toBe(false);
+    expect(isProfitContext("halo", true)).toBe(true);
+    expect(isProfitContext("profitable", false)).toBe(false);
+  });
+});
+
+describe("collectCandidateAmounts", () => {
+  it("returns uncovered grouped numbers only in profit context", () => {
+    const pc = { profitContext: true };
+    expect(collectCandidateAmounts("Profit minggu ini 9.999.000.", pc).map((a) => a.value)).toEqual([9999000]);
+    expect(collectCandidateAmounts("Profit minggu ini 9.999.000.", { profitContext: false })).toEqual([]);
+    expect(collectCandidateAmounts("Profit Rp2.550.000 dari 312 transaksi", pc)).toEqual([]);
+    expect(collectCandidateAmounts("| Rp | 9.999.000 |", pc).map((a) => a.value)).toEqual([9999000]);
+    expect(collectCandidateAmounts("Profit 2.550.000,-", pc).map((a) => a.value)).toEqual([2550000]);
+    expect(collectCandidateAmounts("rugi -250.000", pc).map((a) => a.value)).toEqual([-250000]);
+    expect(collectCandidateAmounts("Profit 2.550.000,50", pc).map((a) => a.value)).toEqual([2550000.5]);
+  });
+  it("parseGuardrailAmounts includes candidates in profit context", () => {
+    expect(parseGuardrailAmounts("Profit (Rp): 9.999.000", { profitContext: true }).map((a) => a.value)).toEqual([9999000]);
+    expect(parseGuardrailAmounts("maksimal 1.000 item", { profitContext: false })).toEqual([]);
+  });
+  it("applyProfitGuardrail treats grouped candidates exactly (reports imply profit context)", () => {
+    expect(applyProfitGuardrail("| Penjualan (Rp) | 4.250.000 |", rep).replaced).toBe(false);
+    expect(applyProfitGuardrail("Profit (Rp): 9.999.000", rep).replaced).toBe(true);
+    expect(applyProfitGuardrail("Profit 2.550.001", rep).replaced).toBe(true);
+    expect(applyProfitGuardrail("dari 1.250 transaksi", [{ report: { ...base, transactions: 1250 }, label: "x" }]).replaced).toBe(true);
   });
 });

@@ -64,12 +64,89 @@ const GLUED_PREFIX_RE = new RegExp(String.raw`([a-z])(?=(?:${PREFIX})\.?\s*\d)`,
 // Every currency-tagged digit position the backstop requires an amount for.
 const BACKSTOP_RE = new RegExp(String.raw`(?:${PREFIX})\.?\s*\d|\d\s*(?:${PREFIX})\b`, "gi");
 
+// Cyrillic/Greek letters that look like the Latin letters of "Rp" (NFKC leaves them alone).
+const CONFUSABLES: Record<string, string> = { "Р": "P", "р": "p", "Ρ": "P", "ρ": "p" };
+
 /**
- * Ruling 28: guardrail input is parsed from a normalized copy, so spacing and case cannot hide an
- * amount. A space is inserted between a letter and a following Rp/IDR when digits follow.
+ * Ruling 29(d): the checking copy of model text. NFKC (full-width digits/letters, NBSP), zero-width
+ * characters removed, U+2212 as "-", markdown emphasis/code characters removed. Never displayed.
+ */
+export function normalizeForCheck(text: string): string {
+  return text
+    .normalize("NFKC")
+    .replace(/[​-‍﻿]/g, "")
+    .replace(/−/g, "-")
+    .replace(/[РрΡρ]/g, (c) => CONFUSABLES[c]!)
+    .replace(/[*_~`]/g, "");
+}
+
+/**
+ * Ruling 28/29: guardrail input is parsed from a normalized copy, so spacing, case, unicode
+ * look-alikes and markdown cannot hide an amount. After normalizeForCheck, a space is inserted
+ * between a letter and a following Rp/IDR when digits follow.
  */
 export function normalizeForGuardrail(text: string): string {
-  return text.replace(GLUED_PREFIX_RE, "$1 ");
+  return normalizeForCheck(text).replace(GLUED_PREFIX_RE, "$1 ");
+}
+
+/** Ruling 29(b): a grouped number ("1.000", "9.999.000", "12,500"). */
+const GROUPED_RE = /\d{1,3}(?:[.,]\d{3})+/;
+
+/** Ruling 29(b, d): the sentinel stops live streaming on a currency marker or a grouped number. */
+export function sentinelTrips(text: string): boolean {
+  const n = normalizeForCheck(text);
+  return CURRENCY_MARKER_RE.test(n) || GROUPED_RE.test(n);
+}
+
+/** Ruling 29(a): profit vocabulary in the user's message. */
+const PROFIT_CONTEXT_RE = /\b(profit|laba|untung|rugi|omzet|omset|penjualan|pendapatan|hpp|keuntungan|margin)\b/i;
+
+export function isProfitContext(message: string, getProfitCalled: boolean): boolean {
+  return getProfitCalled || PROFIT_CONTEXT_RE.test(normalizeForCheck(message));
+}
+
+/**
+ * A whole currency word (Rp, IDR, rupiah) in the checking copy. The orchestrator also treats held
+ * text that names the currency as profit-context, so "| Rp | 9.999.000 |" is checked even when the
+ * user's question had no profit vocabulary (extension of Ruling 29, same cost as Ruling 25 prices).
+ */
+export function mentionsCurrency(text: string): boolean {
+  return /(?<![a-z])(?:rp|idr|rupiah)(?![a-z])/i.test(normalizeForCheck(text));
+}
+
+export type CandidateOptions = { profitContext: boolean };
+
+// A whole number token; it is a candidate when it contains a grouped number.
+const NUMBER_TOKEN_RE = /(?<![\d.,])\d+(?:[.,]\d+)*/g;
+const FAILED: ParsedAmount = { value: NaN, scaled: false, viaRugi: false };
+
+function candidatesIn(normalized: string, covered: Located[]): ParsedAmount[] {
+  const out: ParsedAmount[] = [];
+  for (const m of normalized.matchAll(NUMBER_TOKEN_RE)) {
+    if (!GROUPED_RE.test(m[0])) continue;
+    const start = m.index!;
+    const end = start + m[0].length;
+    if (covered.some((l) => l.start < end && start < l.end)) continue;
+    const base = parseNumber(m[0]);
+    if (base === null) {
+      out.push(FAILED);
+      continue;
+    }
+    const neg = normalized[start - 1] === "-";
+    out.push({ value: neg && base !== 0 ? -base : base, scaled: false, viaRugi: false });
+  }
+  return out;
+}
+
+/**
+ * Ruling 29(c): in a profit-context turn, every grouped number the parser does not already account
+ * for is a candidate amount. The guardrail then requires it to equal a successful report's
+ * sales/cogs/profit exactly (candidates are never "scaled", so no tolerance applies).
+ */
+export function collectCandidateAmounts(text: string, opts: CandidateOptions): ParsedAmount[] {
+  if (!opts.profitContext) return [];
+  const normalized = normalizeForGuardrail(text);
+  return candidatesIn(normalized, scan(normalized));
 }
 
 function parseNumber(raw: string): number | null {
@@ -125,15 +202,16 @@ export function parseRupiahAmountsDetailed(text: string): ParsedAmount[] {
  * currency+digit position (`Rp 9`, `9 IDR`, any case) that no parsed amount covers, so an
  * unrecognised form forces replacement instead of passing.
  */
-export function parseGuardrailAmounts(text: string): ParsedAmount[] {
+export function parseGuardrailAmounts(text: string, opts: CandidateOptions = { profitContext: false }): ParsedAmount[] {
   const normalized = normalizeForGuardrail(text);
   const located = scan(normalized);
   const out = located.map((l) => l.amount);
   for (const m of normalized.matchAll(BACKSTOP_RE)) {
     const start = m.index!;
     const end = start + m[0].length;
-    if (!located.some((l) => l.start < end && start < l.end)) out.push({ value: NaN, scaled: false, viaRugi: false });
+    if (!located.some((l) => l.start < end && start < l.end)) out.push(FAILED);
   }
+  if (opts.profitContext) out.push(...candidatesIn(normalized, located));
   return out;
 }
 

@@ -1,4 +1,4 @@
-import { CURRENCY_MARKER_RE, CURRENCY_TAIL_RE } from "../money.js";
+import { CURRENCY_TAIL_RE, normalizeForCheck, sentinelTrips } from "../money.js";
 
 /**
  * Ruling 25: live text passes through this sentinel so that no rupiah amount reaches the client
@@ -7,8 +7,9 @@ import { CURRENCY_MARKER_RE, CURRENCY_TAIL_RE } from "../money.js";
  *   is never half-emitted.
  * - A trailing word containing a digit is held too, because a suffix ("2.550.000 " | "juta") may
  *   follow.
- * - Once the pending text contains a currency marker, everything from there to the end of the turn
- *   is held for the guardrail.
+ * - Once the pending text contains a currency marker or a grouped number (Ruling 29b), everything
+ *   from there to the end of the turn is held for the guardrail. Markers are tested on the
+ *   normalized checking copy (Ruling 29d: NFKC, zero-width, U+2212, markdown); emitted text is raw.
  */
 export class StreamSentinel {
   private pending = "";
@@ -24,17 +25,17 @@ export class StreamSentinel {
       return;
     }
     this.pending += text;
-    if (CURRENCY_MARKER_RE.test(this.pending)) {
+    if (sentinelTrips(this.pending)) {
       this.startBuffering();
       return;
     }
     let cut = lastWhitespaceEnd(this.pending);
     if (cut <= 0) return;
-    const digitTail = /\S*\d\S*\s+$/.exec(this.pending.slice(0, cut));
+    const digitTail = /\S*\p{Nd}\S*\s+$/u.exec(this.pending.slice(0, cut));
     if (digitTail) cut = digitTail.index;
     // A dangling prefix ("ProfitRp ", "totalrp.") waits for what follows it (Ruling 28).
     const head = this.pending.slice(0, cut);
-    if (CURRENCY_TAIL_RE.test(head)) cut = /\S*\s*$/.exec(head)!.index;
+    if (CURRENCY_TAIL_RE.test(normalizeForCheck(head))) cut = /\S*\s*$/.exec(head)!.index;
     if (cut <= 0) return;
     this.emit(this.pending.slice(0, cut));
     this.pending = this.pending.slice(cut);

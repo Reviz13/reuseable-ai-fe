@@ -552,7 +552,10 @@ describe("runChat: figures split across a tool boundary (fix round 2)", () => {
     const r = await runChat(s.deps, input(), s.emit, fresh());
     noTokenContains(s.events, "9.999.000");
     expect(r!.guardrailReplaced).toBe(true);
-    expect(tokens(s.events).at(-1)!.startsWith("\n\nProfit minggu ini (2026-10-26 s.d. 2026-10-27): Rp2.550.000.")).toBe(true);
+    // Ruling 29(b): the grouped number trips the sentinel at once, so nothing streams before it and
+    // the template is the only token (no "\n\n" separator).
+    expect(tokens(s.events)).toHaveLength(1);
+    expect(tokens(s.events)[0]!.startsWith("Profit minggu ini (2026-10-26 s.d. 2026-10-27): Rp2.550.000.")).toBe(true);
   });
 
   it("replacement copy after a streamed preamble is separated by a blank line", async () => {
@@ -703,5 +706,104 @@ describe("runChat: Ruling 28 probes (9.999.000 must never reach a token)", () =>
     expect(tokens(s.events).length).toBeGreaterThan(3);
     expect(r!.text).toBe("Stok terpakai dicatat, yang terpenting cek laporan.");
     expect(r!.guardrailReplaced).toBe(false);
+  });
+});
+
+describe("runChat: Ruling 29 semantic backstop (9.999.000 must never reach a token)", () => {
+  const fresh = () => new AbortController().signal;
+  const PROFIT_Q = "Profit minggu ini berapa?";
+  // Checked on an NFKC copy so full-width digits count as a leak too.
+  const never = (events: SseEvent[]) => {
+    for (const t of tokens(events)) expect(t.normalize("NFKC")).not.toMatch(/9\.?999\.?000/);
+  };
+  const split3 = (s: string) => s.match(/[\s\S]{1,3}/gu)!;
+
+  const LEAKS: [string, string][] = [
+    ["table cell | Rp | 9.999.000 |", "| Mata uang | Nilai |\n|---|---|\n| Rp | 9.999.000 |"],
+    ["table header Profit (Rp)", "| Profit (Rp) |\n|---|\n| 9.999.000 |"],
+    ["Profit (Rp): 9.999.000", "Profit (Rp): 9.999.000."],
+    ["Rp: 9.999.000", "Profit Rp: 9.999.000."],
+    ["Rp, 9.999.000", "Profit Rp, 9.999.000."],
+    ["Rp (9.999.000)", "Profit Rp (9.999.000)."],
+    ["bare figure", "Profit minggu ini 9.999.000."],
+    ["bare figure ,-", "Profit 9.999.000,-"],
+    ["full-width digits", "Profit Rp ９.９９９.０００."],
+    ["full-width letters", "Profit Ｒｐ 9.999.000."],
+    ["Cyrillic Er", "Profit Рp 9.999.000."],
+    ["zero-width space", "Profit Rp​9.999.000."],
+    ["U+2212 minus", "Profit Rp −9.999.000."],
+    ["bold prefix", "Profit **Rp** 9.999.000."],
+    ["strikethrough", "Profit Rp~~9.999.000~~."],
+  ];
+
+  describe.each([
+    ["whole", (s: string) => [s]],
+    ["split into 3-char chunks", split3],
+  ])("%s", (_mode, chunker) => {
+    it.each(LEAKS)("(A) no tool, profit question: %s -> NO_DATA", async (_n, body) => {
+      const llm = createFakeAdapter([[...chunker(body).map(text), end()]]);
+      const s = setup({ llm });
+      const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+      never(s.events);
+      expect(r!.guardrailReplaced).toBe(true);
+      expect(r!.text.endsWith(NO_DATA)).toBe(true);
+    });
+
+    it.each(LEAKS)("(B) successful tool (2.550.000): %s -> template", async (_n, body) => {
+      const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [...chunker(body).map(text), end()]]);
+      const s = setup({ llm });
+      const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+      never(s.events);
+      expect(r!.guardrailReplaced).toBe(true);
+      expect(r!.text).toContain("Rp2.550.000. Penjualan Rp4.250.000, HPP Rp1.700.000, 312 transaksi.");
+    });
+  });
+
+  const GOOD = [
+    "Profit minggu ini Rp2.550.000",
+    "| Metrik | Nilai |\n|---|---|\n| Profit | Rp2.550.000 |",
+    "| Penjualan (Rp) | 4.250.000 |",
+    "Profit 2.550.000,-",
+  ];
+  describe.each([
+    ["whole", (s: string) => [s]],
+    ["split into 3-char chunks", split3],
+  ])("correct answers pass (%s)", (_mode, chunker) => {
+    it.each(GOOD)("%j is not replaced and is happy", async (body) => {
+      const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [...chunker(body).map(text), end()]]);
+      const s = setup({ llm });
+      const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+      expect(r!.guardrailReplaced).toBe(false);
+      expect(r!.avatarFinal).toBe("happy");
+      expect(r!.text.startsWith(body)).toBe(true);
+    });
+  });
+
+  it("non-profit knowledge turn: grouped number held, released unchanged after live streaming", async () => {
+    const parts = ["Buka ", "menu ", "Refund. ", "Stok ", "terpakai ", "dikembalikan, ", "maksimal ", "1.000 ", "item ", "per ", "transaksi."];
+    const llm = createFakeAdapter([[...parts.map(text), end()]]);
+    const s = setup({ llm, chunks: [chunk("a", "d1", 0.9)] });
+    const r = await runChat(s.deps, input("owner", "Bagaimana cara refund?"), s.emit, fresh());
+    const t = tokens(s.events);
+    const at = t.findIndex((x) => x.includes("1.000"));
+    expect(at).toBeGreaterThan(1); // more than one live token before the grouped number
+    expect(t.slice(0, at).join("")).not.toMatch(/\d/);
+    expect(r!.text).toBe(parts.join(""));
+    expect(r!.text).toContain("Stok terpakai");
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.avatarFinal).toBe("happy");
+  });
+
+  it("profit turn with an unrelated grouped number (1.250 transaksi) is replaced by the template (documented cost)", async () => {
+    const big = { ...report, transactions: 1250 };
+    const llm = createFakeAdapter([
+      [call({ period: "this_week" }), end("tool_use")],
+      [text("Profit minggu ini Rp2.550.000 dari 1.250 transaksi."), end()],
+    ]);
+    const s = setup({ llm, getProfit: async () => big });
+    const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).toContain("Rp2.550.000. Penjualan Rp4.250.000, HPP Rp1.700.000, 1250 transaksi.");
+    expect(r!.text).not.toContain("1.250 transaksi");
   });
 });
