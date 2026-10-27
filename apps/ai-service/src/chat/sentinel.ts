@@ -1,4 +1,4 @@
-import { CURRENCY_TAIL_RE, normalizeForCheck, sentinelTrips } from "../money.js";
+import { CURRENCY_TAIL_RE, sentinelTrips, testEitherCopy } from "../money.js";
 
 /**
  * Ruling 25: live text passes through this sentinel so that no rupiah amount reaches the client
@@ -35,7 +35,7 @@ export class StreamSentinel {
     if (digitTail) cut = digitTail.index;
     // A dangling prefix ("ProfitRp ", "totalrp.") waits for what follows it (Ruling 28).
     const head = this.pending.slice(0, cut);
-    if (CURRENCY_TAIL_RE.test(normalizeForCheck(head))) cut = /\S*\s*$/.exec(head)!.index;
+    if (testEitherCopy(CURRENCY_TAIL_RE, head)) cut = /\S*\s*$/.exec(head)!.index;
     if (cut <= 0) return;
     this.emit(this.pending.slice(0, cut));
     this.pending = this.pending.slice(cut);

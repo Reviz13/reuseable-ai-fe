@@ -259,3 +259,26 @@ describe("final fix wave: kerugian negation (S5)", () => {
   it("'ruginya minggu ini Rp250.000' with profit -250000 passes", () =>
     expect(applyProfitGuardrail("ruginya minggu ini Rp250.000", loss(-250000)).replaced).toBe(false));
 });
+
+describe("N1/N2: both checking copies and markdown link text", () => {
+  it("normalizeForCheck keeps tags on request; links become their text", () => {
+    expect(normalizeForCheck("<x 9.999.000>", { keepTags: true })).toBe("<x 9.999.000>");
+    expect(normalizeForCheck("<x 9.999.000>")).toBe("");
+    expect(normalizeForCheck("[9](x).[999](y).[000](z)")).toBe("9.999.000");
+    expect(normalizeForCheck("[9][a].[999][b].[000]")).toBe("9.999.000");
+  });
+  it.each(["<9.999.000>", "<Rp9.999.000>", '<b title="Rp9.999.000">x</b>', "<https://x/9.999.000>"])(
+    "sentinel trips on %j",
+    (s) => expect(sentinelTrips(s)).toBe(true),
+  );
+  it.each([
+    "Profit minggu ini <9.999.000> ya.",
+    "Profit minggu ini <Rp:9.999.000> ya.",
+    "Profit < Rp9.999.000 > lalu.",
+    "Profit minggu ini <Rp9.999.000 dan >0.",
+    "Profit [9](x).[999](y).[000](z)",
+  ])("applyProfitGuardrail replaces %j", (s) => expect(applyProfitGuardrail(s, rep).replaced).toBe(true));
+  it.each(["<b>Rp2.550.000</b>", "[Rp2.550.000](x)"])("correct %j passes", (s) =>
+    expect(applyProfitGuardrail(s, rep).replaced).toBe(false),
+  );
+});

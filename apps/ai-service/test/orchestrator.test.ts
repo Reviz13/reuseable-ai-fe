@@ -946,3 +946,59 @@ describe("runChat: final fix wave probes (M1, M4, M5, M6)", () => {
     expect(r!.text).toBe(parts.join(""));
   });
 });
+
+describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must never reach a token)", () => {
+  const fresh = () => new AbortController().signal;
+  const PROFIT_Q = "Profit minggu ini berapa?";
+  const never = (events: SseEvent[]) => {
+    for (const t of tokens(events)) {
+      expect(t).not.toContain("9.999.000");
+      expect(t.normalize("NFKC")).not.toMatch(/9\D{0,3}999\D{0,3}000|9999000/);
+    }
+  };
+  const LEAKS: [string, string][] = [
+    ["angle bare", "Profit minggu ini <9.999.000> ya."],
+    ["angle Rp", "Profit minggu ini <Rp9.999.000> ya."],
+    ["autolink Rp scheme", "Profit minggu ini <Rp:9.999.000> ya."],
+    ["tag attribute", 'Profit minggu ini <b title="Rp9.999.000">x</b> ya.'],
+    ["fake tag with digits", "Profit minggu ini <x 9.999.000> ya."],
+    ["lt ... gt", "Profit < Rp9.999.000 > lalu."],
+    ["lt then gt later", "Profit minggu ini <Rp9.999.000 dan >0."],
+    ["autolink url", "Profit minggu ini <https://x/9.999.000> ya."],
+    ["markdown link text (N2)", "Profit minggu ini [9](x).[999](y).[000](z) ya."],
+    ["reference link text (N2)", "Profit minggu ini [9][a].[999][b].[000] ya."],
+  ];
+  const modes: [string, (s: string) => string[]][] = [
+    ["whole", (s) => [s]],
+    ["3-char chunks", (s) => s.match(/[\s\S]{1,3}/gu)!],
+    ["word by word", (s) => s.split(/(?<=\s)/)],
+  ];
+  describe.each(modes)("%s", (_m, chunker) => {
+    it.each(LEAKS)("(A) no tool: %s -> NO_DATA", async (_n, body) => {
+      const s = setup({ llm: createFakeAdapter([[...chunker(body).map(text), end()]]) });
+      const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+      never(s.events);
+      expect(r!.guardrailReplaced).toBe(true);
+      expect(r!.text.endsWith(NO_DATA)).toBe(true);
+    });
+    it.each(LEAKS)("(B) successful tool: %s -> template", async (_n, body) => {
+      const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [...chunker(body).map(text), end()]]);
+      const s = setup({ llm });
+      const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+      never(s.events);
+      expect(r!.guardrailReplaced).toBe(true);
+      expect(r!.text).toContain("Rp2.550.000. Penjualan Rp4.250.000, HPP Rp1.700.000, 312 transaksi.");
+    });
+    it.each(["<b>Rp2.550.000</b>", "[Rp2.550.000](x)", "Profit Rp2.550.000", "| Profit | Rp2.550.000 |"])(
+      "correct answer %j is not replaced and is happy",
+      async (body) => {
+        const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [...chunker(body).map(text), end()]]);
+        const s = setup({ llm });
+        const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+        expect(r!.guardrailReplaced).toBe(false);
+        expect(r!.avatarFinal).toBe("happy");
+        expect(r!.text.startsWith(body)).toBe(true);
+      },
+    );
+  });
+});

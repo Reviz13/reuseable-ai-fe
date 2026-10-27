@@ -96,16 +96,22 @@ function decodeEntity(whole: string, body: string): string {
  * - M1 render-time transforms first: HTML tags removed, character references decoded in one pass
  *   (numeric with or without ";", the common named ones), markdown backslash escapes undone, so
  *   `9\.999\.000`, `9&#46;999&#46;000` and `9<span></span>.999.000` read as 9.999.000.
+ * - N2: markdown links read as their text (`[9](x).[999](y)` -> "9.999"), so link text cannot split a figure.
  * - NFKC (full-width digits/letters, NBSP), combining marks and zero-width characters removed,
  *   U+2212 as "-", look-alike Cyrillic/Greek letters mapped, markdown emphasis/code characters removed.
+ *
+ * N1: `keepTags` skips only the tag-strip step. The widget shows raw HTML and angle-bracket text as
+ * literal text, so anything between "<" and ">" may be displayed; every check runs on both copies.
  */
-export function normalizeForCheck(text: string): string {
-  return text
-    .replace(/<[^>]*>/g, "")
+export function normalizeForCheck(text: string, opts: { keepTags?: boolean } = {}): string {
+  return (opts.keepTags ? text : text.replace(/<[^>]*>/g, ""))
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);?/gi, (whole, body: string) =>
       body[0] !== "#" && !whole.endsWith(";") ? whole : decodeEntity(whole, body),
     )
     .replace(/\\([!-/:-@[-`{-~])/g, "$1")
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
+    .replace(/\[([^\]]*)\]/g, "$1")
     .normalize("NFKC")
     .replace(/\p{M}/gu, "")
     .replace(/[​-‍﻿]/g, "")
@@ -119,8 +125,21 @@ export function normalizeForCheck(text: string): string {
  * look-alikes and markdown cannot hide an amount. After normalizeForCheck, a space is inserted
  * between a letter and a following Rp/IDR when digits follow.
  */
-export function normalizeForGuardrail(text: string): string {
-  return normalizeForCheck(text).replace(GLUED_PREFIX_RE, "$1 ");
+export function normalizeForGuardrail(text: string, opts: { keepTags?: boolean } = {}): string {
+  return normalizeForCheck(text, opts).replace(GLUED_PREFIX_RE, "$1 ");
+}
+
+/** N1: the two checking copies, tags stripped and tags kept. Checks take the union of both. */
+function checkingCopies(text: string, guardrail = false): string[] {
+  const f = guardrail ? normalizeForGuardrail : normalizeForCheck;
+  const stripped = f(text);
+  const kept = f(text, { keepTags: true });
+  return kept === stripped ? [stripped] : [stripped, kept];
+}
+
+/** N1: true when `re` matches either checking copy. */
+export function testEitherCopy(re: RegExp, text: string): boolean {
+  return checkingCopies(text).some((n) => re.test(n));
 }
 
 /** Ruling 29(b): a grouped number ("1.000", "9.999.000", "12,500"). */
@@ -139,8 +158,9 @@ const SPACED_TOKEN_RE = /(?<![\d.,'’])\d{1,3}(?:['’\s  ]\d{3})+(?!\d)/g;
  * space-grouped or 4+-digit number, or a named character reference the checking copy cannot decode.
  */
 export function sentinelTrips(text: string): boolean {
-  const n = normalizeForCheck(text);
-  return CURRENCY_MARKER_RE.test(n) || GROUPED_RE.test(n) || LONG_RUN_RE.test(n) || SPACED_RE.test(n) || UNKNOWN_ENTITY_RE.test(n);
+  return checkingCopies(text).some(
+    (n) => CURRENCY_MARKER_RE.test(n) || GROUPED_RE.test(n) || LONG_RUN_RE.test(n) || SPACED_RE.test(n) || UNKNOWN_ENTITY_RE.test(n),
+  );
 }
 
 /**
@@ -153,7 +173,7 @@ export const PROFIT_WORD_RE =
 
 /** A profit word in `text`, checked on the normalized checking copy. */
 export function mentionsProfit(text: string | undefined): boolean {
-  return !!text && PROFIT_WORD_RE.test(normalizeForCheck(text));
+  return !!text && testEitherCopy(PROFIT_WORD_RE, text);
 }
 
 export function isProfitContext(message: string, getProfitCalled: boolean): boolean {
@@ -166,7 +186,7 @@ export function isProfitContext(message: string, getProfitCalled: boolean): bool
  * user's question had no profit vocabulary (extension of Ruling 29, same cost as Ruling 25 prices).
  */
 export function mentionsCurrency(text: string): boolean {
-  return /(?<![a-z])(?:rp|idr|rupiah)(?![a-z])/i.test(normalizeForCheck(text));
+  return testEitherCopy(/(?<![a-z])(?:rp|idr|rupiah)(?![a-z])/i, text);
 }
 
 export type CandidateOptions = { profitContext: boolean };
@@ -225,8 +245,7 @@ function candidatesIn(normalized: string, covered: Located[]): ParsedAmount[] {
  */
 export function collectCandidateAmounts(text: string, opts: CandidateOptions): ParsedAmount[] {
   if (!opts.profitContext) return [];
-  const normalized = normalizeForGuardrail(text);
-  return candidatesIn(normalized, scan(normalized));
+  return checkingCopies(text, true).flatMap((n) => candidatesIn(n, scan(n)));
 }
 
 function parseNumber(raw: string): number | null {
@@ -283,7 +302,11 @@ export function parseRupiahAmountsDetailed(text: string): ParsedAmount[] {
  * unrecognised form forces replacement instead of passing.
  */
 export function parseGuardrailAmounts(text: string, opts: CandidateOptions = { profitContext: false }): ParsedAmount[] {
-  const normalized = normalizeForGuardrail(text);
+  // N1: both copies are parsed; an amount found in either must match a report.
+  return checkingCopies(text, true).flatMap((n) => amountsIn(n, opts));
+}
+
+function amountsIn(normalized: string, opts: CandidateOptions): ParsedAmount[] {
   const located = scan(normalized);
   const out = located.map((l) => l.amount);
   for (const m of normalized.matchAll(BACKSTOP_RE)) {
