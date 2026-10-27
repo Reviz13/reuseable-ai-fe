@@ -267,3 +267,35 @@ describe("review fixes", () => {
     expect((await send("PUT", `/admin/pos/faqs/${f!.id}`, { question: "q", answer: "a" })).statusCode).toBe(404);
   });
 });
+
+describe("review fixes round 2", () => {
+  it("400 body lists only path and code, never the submitted value", async () => {
+    const doc = await upload("evil.md", Buffer.from("# E\n\nisi evil"), MD);
+    const id = (doc.json() as { document_id: string }).document_id;
+    await waitDone(id);
+    const r = await send("POST", `/admin/pos/documents/${id}/activate`, { version_id: "EVIL-VALUE" });
+    expect(r.statusCode).toBe(400);
+    expect(r.body).not.toContain("EVIL-VALUE");
+    const j = r.json() as { issues: Record<string, unknown>[] };
+    expect(j.issues.every((i) => Object.keys(i).sort().join() === "code,path")).toBe(true);
+  });
+
+  it("a ZodError thrown from handler logic is a 500, not a 400", async () => {
+    const { z } = await import("zod");
+    const a2 = createApp({ config: {} as never, db: h.db, blob: createMemoryBlobStore(), verifyEndUser: async () => { throw new Error("unused"); }, verifyAdmin: async () => ({ user_id: ADMIN, apps: ["pos"] }), now: () => new Date() });
+    a2.get("/test-only/zod", async () => z.string().parse(123));
+    const r = await a2.inject({ method: "GET", url: "/test-only/zod" });
+    await a2.close();
+    expect(r.statusCode).toBe(500);
+    expect(r.json()).toEqual({ error: "internal error" });
+  });
+
+  it(".txt as octet-stream and .md with empty mime are accepted", async () => {
+    const a = await upload("o.txt", Buffer.from("catatan octet txt"), "application/octet-stream");
+    expect(a.statusCode).toBe(202);
+    await waitDone((a.json() as { document_id: string }).document_id);
+    const b = await upload("e.md", Buffer.from("# E\n\nisi mime kosong"), "");
+    expect(b.statusCode).toBe(202);
+    await waitDone((b.json() as { document_id: string }).document_id);
+  });
+});

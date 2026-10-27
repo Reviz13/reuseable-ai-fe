@@ -6,6 +6,7 @@ import { createAuditWriter } from "../audit.js";
 import { withTransaction, type Db } from "../db.js";
 import { DOCX_MIME, extractText } from "../rag/parse.js";
 import { ingestVersion } from "../rag/ingest.js";
+import { HttpError, parseRequest } from "../http.js";
 
 const BUCKET = "knowledge";
 const UuidSchema = z.string().uuid();
@@ -17,14 +18,6 @@ const ALLOWED: Record<string, string[]> = {
   ".txt": ["text/plain"],
 };
 
-class HttpError extends Error {
-  constructor(
-    public statusCode: number,
-    message: string,
-  ) {
-    super(message);
-  }
-}
 const notFound = () => new HttpError(404, "not found");
 
 interface DocRow {
@@ -140,7 +133,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance): void {
       const buf = await part.toBuffer(); // throws 413 past the 20 MB limit
       const checksum = createHash("sha256").update(buf).digest("hex");
 
-      const existingId = req.query.document_id;
+      const existingId = parseRequest(z.string().uuid().optional(), req.query.document_id);
       let doc: DocRow | undefined;
       if (existingId !== undefined) doc = await findDoc(db, appId, existingId);
 
@@ -203,7 +196,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance): void {
       started: number,
     ) => {
       const embedder = embedderOrThrow();
-      const input = FaqInputSchema.parse(req.body);
+      const input = parseRequest(FaqInputSchema, req.body);
       const text = `Q: ${input.question}\nA: ${input.answer}`;
       const checksum = createHash("sha256").update(text).digest("hex");
       let documentId: string;
@@ -243,7 +236,7 @@ export function registerKnowledgeRoutes(app: FastifyInstance): void {
       async (req) => {
         const started = Date.now();
         const doc = await findDoc(db, appId, req.params.id);
-        const versionId = z.object({ version_id: z.string().uuid() }).parse(req.body).version_id;
+        const versionId = parseRequest(z.object({ version_id: z.string().uuid() }), req.body).version_id;
         const [v] = await db.query<{ id: string; error: string | null }>(
           "select id, error from document_versions where id = $1 and document_id = $2",
           [versionId, doc.id],

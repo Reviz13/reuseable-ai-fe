@@ -32,8 +32,17 @@ async function scannedPdf(): Promise<Uint8Array> {
   return pdf.save();
 }
 
+async function twoPagePdf(): Promise<Uint8Array> {
+  const pdf = await PDFDocument.create();
+  const font = await pdf.embedFont(StandardFonts.Helvetica);
+  pdf.addPage([595, 842]).drawText("Langkah pertama adalah menuju kasir", { x: 40, y: 800, size: 12, font });
+  pdf.addPage([595, 842]).drawText("menekan tombol refund pada layar", { x: 40, y: 800, size: 12, font });
+  return pdf.save();
+}
+
 writeFileSync(join(dir, "sop-refund.pdf"), await textPdf());
 writeFileSync(join(dir, "scanned.pdf"), await scannedPdf());
+writeFileSync(join(dir, "two-page.pdf"), await twoPagePdf());
 const doc = new Document({ sections: [{ children: lines.map((l) => new Paragraph(l)) }] });
 writeFileSync(join(dir, "sop.docx"), await Packer.toBuffer(doc));
 console.log("fixtures written");
