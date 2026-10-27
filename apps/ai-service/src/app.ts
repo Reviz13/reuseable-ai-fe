@@ -1,6 +1,6 @@
 import cors from "@fastify/cors";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
-import type { AppId, JwtClaims } from "@ai/contracts";
+import { AppIdSchema, type AppId, type JwtClaims } from "@ai/contracts";
 import { AuthError } from "./auth/errors.js";
 import type { AdminIdentity, AdminVerifier } from "./auth/admin.js";
 import type { EndUserVerifier } from "./auth/endUser.js";
@@ -44,8 +44,12 @@ function bearer(req: FastifyRequest): string {
   return m[1]!;
 }
 
-export function createApp(deps: AppDeps): FastifyInstance {
-  const app = Fastify({ logger: false });
+export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): FastifyInstance {
+  const app = Fastify({
+    logger: opts.logger
+      ? { redact: ["req.headers.authorization", "req.headers['x-internal-key']"] }
+      : false,
+  });
   const corsLookup = createCorsOriginLookup(deps.db, () => deps.now().getTime());
 
   app.decorate("deps", deps);
@@ -59,8 +63,10 @@ export function createApp(deps: AppDeps): FastifyInstance {
       const url = req.url ?? "";
       if (!url.startsWith("/v1/")) return cb(null, { origin: false });
       const origin = req.headers.origin;
-      const appId = /^\/v1\/([^/?]+)/.exec(url)?.[1];
-      if (!origin || !appId) return cb(null, { origin: false });
+      const seg = /^\/v1\/([^/?]+)/.exec(url)?.[1];
+      const parsedApp = AppIdSchema.safeParse(seg);
+      if (!origin || !parsedApp.success) return cb(null, { origin: false });
+      const appId = parsedApp.data;
       corsLookup.allowedOrigins(appId).then(
         (allowed) => cb(null, { origin: allowed.includes(origin), credentials: false }),
         (err) => cb(err as Error, { origin: false }),

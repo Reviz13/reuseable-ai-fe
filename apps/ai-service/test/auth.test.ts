@@ -111,6 +111,13 @@ describe("guards", () => {
     const c = await app.inject({ url: "/admin/pos/ping", headers: { origin: "http://localhost:4100" } });
     expect(c.headers["access-control-allow-origin"]).toBeUndefined();
   });
+  it("CORS: unknown app segment triggers no db query", async () => {
+    const query = vi.fn(async () => [{ allowed_origins: ["http://x"] }]);
+    const app = makeApp({ db: { query } });
+    const r = await app.inject({ url: "/v1/nope", headers: { origin: "http://x" } });
+    expect(r.headers["access-control-allow-origin"]).toBeUndefined();
+    expect(query).not.toHaveBeenCalled();
+  });
 });
 
 describe("cors lookup cache", () => {

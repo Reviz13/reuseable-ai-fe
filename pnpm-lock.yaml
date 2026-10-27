@@ -33,7 +33,7 @@ importers:
         specifier: ^4.4.0
         version: 4.4.0
       fastify:
-        specifier: '5'
+        specifier: ^5.0.0
         version: 5.12.7
       jose:
         specifier: ^5.9.0

@@ -25,7 +25,7 @@ const app = createApp({
     },
   }),
   now: () => new Date(),
-});
+}, { logger: true });
 
 app.addHook("onClose", async () => {
   await db.end();
