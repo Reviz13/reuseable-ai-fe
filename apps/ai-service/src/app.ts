@@ -1,4 +1,5 @@
 import cors from "@fastify/cors";
+import multipart from "@fastify/multipart";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { AppIdSchema, type AppId, type JwtClaims } from "@ai/contracts";
 import { AuthError } from "./auth/errors.js";
@@ -8,6 +9,8 @@ import type { BlobStore } from "./blob.js";
 import type { Config } from "./config.js";
 import { createCorsOriginLookup } from "./cors.js";
 import type { Db } from "./db.js";
+import type { Embedder } from "./rag/embedder.js";
+import { registerKnowledgeRoutes } from "./admin/knowledge.js";
 
 export interface AppDeps {
   config: Config;
@@ -18,7 +21,7 @@ export interface AppDeps {
   now: () => Date;
   // Placeholders, tightened by later tasks.
   gatewayFor?: unknown;
-  embedder?: unknown;
+  embedder?: Embedder;
   pos?: unknown;
 }
 
@@ -93,6 +96,9 @@ export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): Fasti
     }
     req.admin = admin;
   });
+
+  void app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
+  registerKnowledgeRoutes(app);
 
   app.get("/healthz", async () => ({ ok: true }));
   return app;
