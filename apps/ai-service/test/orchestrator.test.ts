@@ -967,6 +967,15 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
     ["autolink url", "Profit minggu ini <https://x/9.999.000> ya."],
     ["markdown link text (N2)", "Profit minggu ini [9](x).[999](y).[000](z) ya."],
     ["reference link text (N2)", "Profit minggu ini [9][a].[999][b].[000] ya."],
+    // NI-1/NI-2 (Ruling 53): text marked shows literally, or as a tooltip, must stay in some copy.
+    ["NI-1 non-link paren (space in url)", "Profit [a](9.999.000 ya)"],
+    ["NI-1 non-link paren Rp", "Profit [a](Rp9.999.000 ya)"],
+    ["NI-1 undefined reference", "Profit [a][9.999.000]"],
+    ["NI-1 undefined reference Rp", "Profit [a][Rp 9.999.000]"],
+    ["NI-1 code span", "Profit `[a](9.999.000)`"],
+    ["NI-1 fenced code block", "Profit\n\n```\n[a](9.999.000)\n```"],
+    ["NI-2 link title", 'Profit [a](x "Rp9.999.000")'],
+    ["figure only in a link url (accepted fail-closed cost)", "Profit [x](https://s/9.999.000)"],
   ];
   const modes: [string, (s: string) => string[]][] = [
     ["whole", (s) => [s]],
@@ -989,7 +998,17 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
       expect(r!.guardrailReplaced).toBe(true);
       expect(r!.text).toContain("Rp2.550.000. Penjualan Rp4.250.000, HPP Rp1.700.000, 312 transaksi.");
     });
-    it.each(["<b>Rp2.550.000</b>", "[Rp2.550.000](x)", "Profit Rp2.550.000", "| Profit | Rp2.550.000 |"])(
+    it.each(["Tekan tombol refund lalu pilih transaksi.", "Tekan tombol <Enter> lalu pilih transaksi.", "Buka [menu](x) lalu pilih refund."])(
+      "knowledge answer %j still streams live (more than one token) and is released unchanged",
+      async (body) => {
+        const s = setup({ llm: createFakeAdapter([[...chunker(body).map(text), end()]]), chunks: [chunk("a", "d1", 0.9)] });
+        const r = await runChat(s.deps, input("owner", "Bagaimana cara refund?"), s.emit, fresh());
+        if (chunker(body).length > 1) expect(tokens(s.events).length).toBeGreaterThan(1);
+        expect(r!.guardrailReplaced).toBe(false);
+        expect(r!.text).toBe(body);
+      },
+    );
+    it.each(["<b>Rp2.550.000</b>", "[Rp2.550.000](x)", "Profit Rp2.550.000", "| Profit | Rp2.550.000 |", "Profit 2,55 juta"])(
       "correct answer %j is not replaced and is happy",
       async (body) => {
         const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [...chunker(body).map(text), end()]]);

@@ -100,18 +100,28 @@ function decodeEntity(whole: string, body: string): string {
  * - NFKC (full-width digits/letters, NBSP), combining marks and zero-width characters removed,
  *   U+2212 as "-", look-alike Cyrillic/Greek letters mapped, markdown emphasis/code characters removed.
  *
- * N1: `keepTags` skips only the tag-strip step. The widget shows raw HTML and angle-bracket text as
- * literal text, so anything between "<" and ">" may be displayed; every check runs on both copies.
+ * N1/N2/Ruling 53: tag stripping and link flattening are interpretations, never the only copy.
+ * `keepTags` skips the tag-strip step; `flattenLinks: false` skips the link step. checkingCopies()
+ * runs every check on all four combinations, so text marked shows literally (a "link" that is not
+ * one, a code span, a link title tooltip, angle-bracket text) is never deleted from every copy.
+ * The defaults (tags stripped, links flattened) are one of the four.
  */
-export function normalizeForCheck(text: string, opts: { keepTags?: boolean } = {}): string {
-  return (opts.keepTags ? text : text.replace(/<[^>]*>/g, ""))
+export type CheckOptions = { keepTags?: boolean; flattenLinks?: boolean };
+
+function flattenLinks(s: string): string {
+  return s
+    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
+    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
+    .replace(/\[([^\]]*)\]/g, "$1");
+}
+
+export function normalizeForCheck(text: string, opts: CheckOptions = {}): string {
+  const unescaped = (opts.keepTags ? text : text.replace(/<[^>]*>/g, ""))
     .replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);?/gi, (whole, body: string) =>
       body[0] !== "#" && !whole.endsWith(";") ? whole : decodeEntity(whole, body),
     )
-    .replace(/\\([!-/:-@[-`{-~])/g, "$1")
-    .replace(/\[([^\]]*)\]\([^)]*\)/g, "$1")
-    .replace(/\[([^\]]*)\]\[[^\]]*\]/g, "$1")
-    .replace(/\[([^\]]*)\]/g, "$1")
+    .replace(/\\([!-/:-@[-`{-~])/g, "$1");
+  return (opts.flattenLinks === false ? unescaped : flattenLinks(unescaped))
     .normalize("NFKC")
     .replace(/\p{M}/gu, "")
     .replace(/[​-‍﻿]/g, "")
@@ -125,19 +135,28 @@ export function normalizeForCheck(text: string, opts: { keepTags?: boolean } = {
  * look-alikes and markdown cannot hide an amount. After normalizeForCheck, a space is inserted
  * between a letter and a following Rp/IDR when digits follow.
  */
-export function normalizeForGuardrail(text: string, opts: { keepTags?: boolean } = {}): string {
+export function normalizeForGuardrail(text: string, opts: CheckOptions = {}): string {
   return normalizeForCheck(text, opts).replace(GLUED_PREFIX_RE, "$1 ");
 }
 
-/** N1: the two checking copies, tags stripped and tags kept. Checks take the union of both. */
+const COPY_OPTIONS: CheckOptions[] = [
+  { keepTags: true, flattenLinks: false }, // the original structure (all other normalisations applied)
+  { keepTags: false, flattenLinks: false },
+  { keepTags: true, flattenLinks: true },
+  { keepTags: false, flattenLinks: true },
+];
+
+/**
+ * Ruling 53: every interpretation of the text, added to the union, never substituted. Checks take the
+ * union: the sentinel trips if any copy trips; an amount or candidate in any copy must match a
+ * report. Identical copies are deduplicated, so plain text is checked once.
+ */
 function checkingCopies(text: string, guardrail = false): string[] {
   const f = guardrail ? normalizeForGuardrail : normalizeForCheck;
-  const stripped = f(text);
-  const kept = f(text, { keepTags: true });
-  return kept === stripped ? [stripped] : [stripped, kept];
+  return [...new Set(COPY_OPTIONS.map((o) => f(text, o)))];
 }
 
-/** N1: true when `re` matches either checking copy. */
+/** True when `re` matches any checking copy. */
 export function testEitherCopy(re: RegExp, text: string): boolean {
   return checkingCopies(text).some((n) => re.test(n));
 }
