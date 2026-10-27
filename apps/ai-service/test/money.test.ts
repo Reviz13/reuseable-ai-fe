@@ -33,6 +33,12 @@ describe("parseRupiahAmounts", () => {
     ["1.250 juta", 1250000000],
     ["Rp1.250.000,50", 1250000.5],
     ["Rp 0", 0],
+    ["Rp2,600,000", 2600000],
+    ["Rp 2,600,000.00", 2600000],
+    ["IDR 2,600,000", 2600000],
+    ["Rp1,25 jt", 1250000],
+    ["2.600.000 rupiah", 2600000],
+    ["2,55 jutaan", 2550000],
     ["-Rp250.000", -250000],
     ["- Rp 250.000", -250000],
     ["Rp -250.000", -250000],
@@ -40,6 +46,11 @@ describe("parseRupiahAmounts", () => {
     ["Rugi sebesar Rp250.000", -250000],
   ])("parses %j as %s", (text, n) => expect(parseRupiahAmounts(text)).toEqual([n]));
 
+  it.each(["Rp2.600.0000", "Rp2.600.000.50", "Rp2.600.000,5,5"])("emits NaN for malformed %s", (s) => {
+    const r = parseRupiahAmounts(s);
+    expect(r).toHaveLength(1);
+    expect(r[0]).toBeNaN();
+  });
   it("ignores bare numbers, percentages and dates", () => {
     expect(parseRupiahAmounts("312 transaksi, naik 12% per 27/10 (2026-10-20 s.d. 2026-10-26)")).toEqual([]);
   });

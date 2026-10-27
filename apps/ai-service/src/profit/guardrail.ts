@@ -6,13 +6,12 @@ export type LabeledReport = { report: ProfitReport; label: string };
 const TOLERANCE = 0.005;
 
 function matches(a: ParsedAmount, reports: LabeledReport[]): boolean {
+  if (Number.isNaN(a.value)) return false;
   for (const { report: r } of reports) {
     for (const v of [r.sales, r.cogs, r.profit]) {
-      const candidates = a.viaRugi ? [a.value, Math.abs(a.value)] : [a.value];
-      for (const c of candidates) {
-        if (c === v || c === Math.round(v)) return true;
-        if (a.scaled && Math.abs(c - v) <= Math.abs(v) * TOLERANCE) return true;
-      }
+      const c = a.value;
+      if (c === v || c === Math.round(v)) return true;
+      if (a.scaled && Math.abs(c - v) <= Math.abs(v) * TOLERANCE) return true;
     }
   }
   return false;

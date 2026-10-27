@@ -48,9 +48,31 @@ describe("applyProfitGuardrail", () => {
     expect(applyProfitGuardrail("Rp -250.000", loss).replaced).toBe(false);
     expect(applyProfitGuardrail("Profit Rp250.000", loss).replaced).toBe(true);
   });
-  it("accepts absolute value when written with rugi", () => {
-    const r = applyProfitGuardrail("rugi Rp2.550.000", rep);
-    expect(r.replaced).toBe(false);
+  it("rejects a rugi sign error (no absolute-value match)", () => {
+    expect(applyProfitGuardrail("rugi Rp2.550.000", rep).replaced).toBe(true);
+    expect(applyProfitGuardrail("Minggu ini rugi Rp250.000", loss).replaced).toBe(false);
+  });
+  it("checks US-style grouped amounts", () => {
+    expect(applyProfitGuardrail("Rp2,600,000", rep).replaced).toBe(true);
+    expect(applyProfitGuardrail("Rp 2,600,000.00", rep).replaced).toBe(true);
+    expect(applyProfitGuardrail("IDR 2,600,000", rep).replaced).toBe(true);
+    expect(applyProfitGuardrail("Rp2,550,000", rep).replaced).toBe(false);
+    expect(applyProfitGuardrail("Rp 2,550,000.00", rep).replaced).toBe(false);
+  });
+  it("checks the rupiah suffix exactly", () => {
+    expect(applyProfitGuardrail("2.600.000 rupiah", rep).replaced).toBe(true);
+    expect(applyProfitGuardrail("2.550.000 rupiah", rep).replaced).toBe(false);
+    expect(applyProfitGuardrail("2.551.000 Rupiah", rep).replaced).toBe(true);
+  });
+  it("accepts jutaan with tolerance", () => {
+    expect(applyProfitGuardrail("sekitar 2,55 jutaan", rep).replaced).toBe(false);
+    expect(applyProfitGuardrail("sekitar 2,7 jutaan", rep).replaced).toBe(true);
+  });
+  it.each(["Rp2.600.0000", "Rp2.600.000.50", "Rp2.600.000,5,5"])("fails closed on malformed %s", (s) => {
+    expect(applyProfitGuardrail(`Profit ${s}`, rep).replaced).toBe(true);
+  });
+  it("still ignores non-rupiah numbers", () => {
+    expect(applyProfitGuardrail("312 transaksi, naik 12%, 2026-10-20 s.d. 2026-10-26", rep).replaced).toBe(false);
   });
   it("does not replace text with no amounts but still appends the note", () => {
     const r = applyProfitGuardrail("Tidak ada angka rupiah, 312 transaksi.", rep);

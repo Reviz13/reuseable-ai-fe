@@ -20,24 +20,29 @@ const SCALE: Record<string, number> = {
   jt: 1e6,
   juta: 1e6,
   miliar: 1e9,
+  jutaan: 1e6,
+  rupiah: 1,
 };
 
 // [sign: "-" | "rugi [filler words]"] [Rp|IDR [-]] number [suffix]
 const AMOUNT_RE =
-  /(?<neg>-\s*|\brugi(?:\s+[a-z]+){0,2}?\s+)?(?:(?<![a-z])(?<cur>rp|idr)\.?\s*(?<neg2>-\s*)?)?(?<num>\d+(?:[.,]\d+)*)(?:\s*(?<suf>miliar|juta|jt|ribu|rb)(?![a-z]))?/gi;
+  /(?<neg>-\s*|\brugi(?:\s+[a-z]+){0,2}?\s+)?(?:(?<![a-z])(?<cur>rp|idr)\.?\s*(?<neg2>-\s*)?)?(?<num>\d+(?:[.,]\d+)*)(?:\s*(?<suf>miliar|jutaan|juta|jt|ribu|rb|rupiah)(?![a-z]))?/gi;
 
 function parseNumber(raw: string): number | null {
+  const commas = raw.split(",").length - 1;
   let s = raw;
-  if (s.includes(",")) {
+  if (commas >= 2 || /,\d{3}\./.test(raw)) {
+    // en-US grouping: commas group thousands, dot is the decimal separator.
+    if (!/^\d{1,3}(,\d{3})+(\.\d+)?$/.test(raw)) return null;
+    s = raw.replace(/,/g, "");
+  } else if (commas === 1) {
     // id-ID: dots group thousands, comma is the decimal separator.
-    const parts = s.split(",");
-    if (parts.length !== 2) return null;
-    const int = parts[0]!;
+    const [int, frac] = raw.split(",") as [string, string];
     if (int.includes(".") && !/^\d{1,3}(\.\d{3})+$/.test(int)) return null;
-    s = `${int.replace(/\./g, "")}.${parts[1]}`;
+    s = `${int.replace(/\./g, "")}.${frac}`;
   } else if (s.includes(".")) {
     if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
-    else if (s.split(".").length !== 2) return null; // else a single dot with != 3 decimals: decimal point
+    else if (s.split(".").length !== 2) return null; // single dot with != 3 decimals: decimal point
   }
   const n = Number(s);
   return Number.isFinite(n) ? n : null;
@@ -50,7 +55,11 @@ export function parseRupiahAmountsDetailed(text: string): ParsedAmount[] {
     const suf = g.suf?.toLowerCase();
     if (!g.cur && !suf) continue; // bare numbers are not amounts
     const base = parseNumber(g.num!);
-    if (base === null) continue;
+    if (base === null) {
+      // Fail closed: a currency-tagged amount we cannot read must not pass the guardrail.
+      out.push({ value: NaN, scaled: false, viaRugi: false });
+      continue;
+    }
     let value = Math.round(base * (suf ? SCALE[suf]! : 1) * 100) / 100;
     const viaRugi = !!g.neg && /^rugi/i.test(g.neg);
     if ((g.neg && !viaRugi) || g.neg2 || viaRugi) value = -value;
