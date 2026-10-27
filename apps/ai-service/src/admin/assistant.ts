@@ -90,7 +90,8 @@ export function registerAssistantRoutes(app: FastifyInstance): void {
       try {
         // Lazy import keeps the native module off the startup path of non-avatar code.
         const { default: sharp } = await import("sharp");
-        out = await sharp(buf)
+        // Pixel cap guards against decompression bombs: a tiny PNG can declare a huge canvas.
+        out = await sharp(buf, { limitInputPixels: 4096 * 4096, failOn: "error" })
           .resize(256, 256, { fit: "contain", background: { r: 0, g: 0, b: 0, alpha: 0 } })
           .webp()
           .toBuffer();

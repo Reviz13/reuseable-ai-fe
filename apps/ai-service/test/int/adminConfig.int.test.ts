@@ -153,6 +153,16 @@ describe("avatar upload", () => {
     expect((await putAvatar("idle", "bad.png", Buffer.from("not really a png"), "image/png")).statusCode).toBe(400);
   });
 
+  it("a small PNG declaring a huge canvas is 400 and changes nothing", async () => {
+    const bomb = await sharp({ create: { width: 5000, height: 5000, channels: 4, background: { r: 0, g: 0, b: 0, alpha: 0 } } })
+      .png({ compressionLevel: 9 })
+      .toBuffer();
+    expect(bomb.length).toBeLessThan(5 * 1024 * 1024);
+    const before = await h.db.query("select avatar_frames from assistants where app = 'pos'");
+    expect((await putAvatar("idle", "bomb.png", bomb, "image/png")).statusCode).toBe(400);
+    expect(await h.db.query("select avatar_frames from assistants where app = 'pos'")).toEqual(before);
+  });
+
   it("over 5 MB is 413", async () => {
     expect((await putAvatar("idle", "big.png", Buffer.alloc(5 * 1024 * 1024 + 10, 1), "image/png")).statusCode).toBe(413);
   });
@@ -181,6 +191,11 @@ describe("insights", () => {
     const done = (await get("/admin/pos/gaps?resolved=true")).json() as { id: string; resolved_at: string }[];
     expect(done.map((g) => g.id)).toEqual([g1!.id]);
     expect(done[0]!.resolved_at).toBeTruthy();
+    const [first] = await h.db.query<{ resolved_at: string }>("select resolved_at from knowledge_gaps where id = $1", [g1!.id]);
+    const again = await send("POST", `/admin/pos/gaps/${g1!.id}/resolve`);
+    expect(again.statusCode).toBe(200);
+    const [second] = await h.db.query<{ resolved_at: string }>("select resolved_at from knowledge_gaps where id = $1", [g1!.id]);
+    expect(second!.resolved_at).toEqual(first!.resolved_at);
     expect((await get("/admin/pos/gaps?resolved=maybe")).statusCode).toBe(400);
     const a = await h.db.query("select 1 from audit_log where action = 'gap.resolve' and app = 'pos'");
     expect(a).toHaveLength(1);

@@ -38,10 +38,18 @@ export function registerInsightRoutes(app: FastifyInstance): void {
       const started = Date.now();
       if (!UuidSchema.safeParse(req.params.id).success) throw new HttpError(404, "not found");
       const [gap] = await db.query<{ id: string; resolved_at: string }>(
-        "update knowledge_gaps set resolved_at = now() where id = $1 and app = $2 returning id, resolved_at",
+        "update knowledge_gaps set resolved_at = now() where id = $1 and app = $2 and resolved_at is null returning id, resolved_at",
         [req.params.id, appId],
       );
-      if (!gap) throw new HttpError(404, "not found");
+      if (!gap) {
+        // Already resolved: idempotent, keep the original resolved_at and write no second audit row.
+        const [existing] = await db.query<{ id: string; resolved_at: string }>(
+          "select id, resolved_at from knowledge_gaps where id = $1 and app = $2",
+          [req.params.id, appId],
+        );
+        if (!existing) throw new HttpError(404, "not found");
+        return existing;
+      }
       await audit({
         app: appId,
         actor_type: "admin",
