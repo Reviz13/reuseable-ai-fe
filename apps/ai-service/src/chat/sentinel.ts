@@ -1,4 +1,4 @@
-import { CURRENCY_MARKER_RE } from "../money.js";
+import { CURRENCY_MARKER_RE, CURRENCY_TAIL_RE } from "../money.js";
 
 /**
  * Ruling 25: live text passes through this sentinel so that no rupiah amount reaches the client
@@ -32,6 +32,9 @@ export class StreamSentinel {
     if (cut <= 0) return;
     const digitTail = /\S*\d\S*\s+$/.exec(this.pending.slice(0, cut));
     if (digitTail) cut = digitTail.index;
+    // A dangling prefix ("ProfitRp ", "totalrp.") waits for what follows it (Ruling 28).
+    const head = this.pending.slice(0, cut);
+    if (CURRENCY_TAIL_RE.test(head)) cut = /\S*\s*$/.exec(head)!.index;
     if (cut <= 0) return;
     this.emit(this.pending.slice(0, cut));
     this.pending = this.pending.slice(cut);

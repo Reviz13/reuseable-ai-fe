@@ -1,5 +1,5 @@
 import type { ProfitReport } from "@ai/contracts";
-import { formatRupiah, parseRupiahAmountsDetailed, type ParsedAmount } from "../money.js";
+import { formatRupiah, parseGuardrailAmounts, type ParsedAmount } from "../money.js";
 
 export type LabeledReport = { report: ProfitReport; label: string };
 
@@ -27,8 +27,9 @@ export function applyProfitGuardrail(
 ): { text: string; replaced: boolean } {
   if (reports.length === 0) return { text, replaced: false };
   let out = text;
-  const replaced = parseRupiahAmountsDetailed(text).some((a) => !matches(a, reports));
-  if (replaced) out = reports.map(template).join("\n");
+  // Ruling 28: parse a normalized copy with a fail-closed backstop; passing text is returned as written.
+  const replaced = parseGuardrailAmounts(text).some((a) => !matches(a, reports));
+  if (replaced) out = [...new Set(reports.map(template))].join("\n");
   for (const { report } of reports) {
     if (report.missing_cost_items > 0) {
       const note = `Catatan: profit belum memperhitungkan ${report.missing_cost_items} item tanpa HPP.`;

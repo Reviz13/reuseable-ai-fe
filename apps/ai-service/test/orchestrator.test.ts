@@ -601,3 +601,107 @@ describe("runChat: Ruling 27 vocabulary reaches the guardrail", () => {
     expect(r!.guardrailReplaced).toBe(true);
   });
 });
+
+describe("runChat: Ruling 28 probes (9.999.000 must never reach a token)", () => {
+  const fresh = () => new AbortController().signal;
+  const upstreamDown = async () => {
+    throw new UpstreamError("down");
+  };
+  const never = (events: SseEvent[]) => {
+    for (const t of tokens(events)) expect(t).not.toContain("9.999.000");
+  };
+
+  it("G1: Profit | call (UPSTREAM) | Rp 9.999.000 ya. -> UPSTREAM copy", async () => {
+    const llm = createFakeAdapter([[text("Profit"), call({ period: "this_week" }), end("tool_use")], [text("Rp 9.999.000 ya."), end()]]);
+    const s = setup({ llm, getProfit: upstreamDown });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    never(s.events);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).toBe(UPSTREAM);
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("G2: Profit | call (ok 2.550.000) | Rp 9.999.000 ya. -> template", async () => {
+    const llm = createFakeAdapter([[text("Profit"), call({ period: "this_week" }), end("tool_use")], [text("Rp 9.999.000 ya."), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    never(s.events);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).toContain("Rp2.550.000");
+  });
+
+  it("G3: Profit minggu ini | ok | IDR 9.999.000. -> template", async () => {
+    const llm = createFakeAdapter([
+      [text("Profit minggu ini"), call({ period: "this_week" }), end("tool_use")],
+      [text("IDR 9.999.000."), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    never(s.events);
+    expect(r!.guardrailReplaced).toBe(true);
+  });
+
+  it("G4: Total | call (UPSTREAM) | rp. 9.999.000 -> UPSTREAM copy", async () => {
+    const llm = createFakeAdapter([[text("Total"), call({ period: "this_week" }), end("tool_use")], [text("rp. 9.999.000"), end()]]);
+    const s = setup({ llm, getProfit: upstreamDown });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    never(s.events);
+    expect(r!.text).toBe(UPSTREAM);
+  });
+
+  it("G6: cashier Saya cek | FORBIDDEN | Rp 9.999.000 -> FORBIDDEN copy", async () => {
+    const llm = createFakeAdapter([[text("Saya cek"), call({ period: "today" }), end("tool_use")], [text("Rp 9.999.000"), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("cashier"), s.emit, fresh());
+    never(s.events);
+    expect(r!.text.endsWith(FORBIDDEN)).toBe(true);
+    expect(r!.guardrailReplaced).toBe(true);
+  });
+
+  it.each([
+    ["G7 single chunk", ["ProfitRp 9.999.000"]],
+    ["G7 split after the glued prefix", ["ProfitRp ", "9.999.000"]],
+    ["G7 split inside the prefix", ["ProfitR", "p 9.999.000"]],
+    ["lowercase glued", ["Profit totalrp9.999.000 ya."]],
+    ["lowercase glued, split", ["Profit totalrp", "9.999.000 ya."]],
+    ["spaced suffix", ["Profit 9.999.000 IDR"]],
+    ["spaced suffix, split", ["Profit 9.999.000 ", "IDR ya."]],
+  ])("%s (no tool) -> NO_DATA", async (_n, chunks) => {
+    const llm = createFakeAdapter([[...chunks.map(text), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    never(s.events);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text.endsWith(NO_DATA)).toBe(true);
+  });
+
+  it("Profit | call | Rp2.550.000 (correct) is not replaced and is happy", async () => {
+    const llm = createFakeAdapter([[text("Profit "), call({ period: "this_week" }), end("tool_use")], [text("Rp2.550.000"), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.avatarFinal).toBe("happy");
+    expect(r!.text.startsWith("Profit Rp2.550.000")).toBe(true);
+  });
+
+  it("Saya cek dulu ya preamble streams live", async () => {
+    const llm = createFakeAdapter([
+      [text("Saya "), text("cek "), text("dulu ya"), call({ period: "this_week" }), end("tool_use")],
+      [text(" Profit Rp2.550.000."), end()],
+    ]);
+    const s = setup({ llm });
+    await runChat(s.deps, input(), s.emit, fresh());
+    expect(tokens(s.events).slice(0, 3)).toEqual(["Saya ", "cek ", "dulu "]);
+  });
+
+  it("a knowledge answer with terpakai / terpenting streams in >1 token", async () => {
+    const llm = createFakeAdapter([
+      [text("Stok "), text("terpakai "), text("dicatat, "), text("yang terpenting "), text("cek laporan."), end()],
+    ]);
+    const s = setup({ llm, chunks: [chunk("a", "d1", 0.9)] });
+    const r = await runChat(s.deps, input("owner", "stok?"), s.emit, fresh());
+    expect(tokens(s.events).length).toBeGreaterThan(3);
+    expect(r!.text).toBe("Stok terpakai dicatat, yang terpenting cek laporan.");
+    expect(r!.guardrailReplaced).toBe(false);
+  });
+});

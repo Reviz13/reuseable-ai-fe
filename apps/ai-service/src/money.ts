@@ -32,28 +32,45 @@ const PREFIX = byLength(CURRENCY_PREFIXES);
 const SUFFIX = byLength(Object.keys(SCALE));
 
 /**
- * Any currency word the amount parser understands (prefixes plus SCALE suffixes) as a whole word,
- * or a prefix glued to digits ("totalRp2.550.000"). Used by the chat stream sentinel to stop live
- * streaming before an amount can be emitted. Deliberately looser than the parser ("corp5" trips it):
- * tripping only buffers text, it never replaces it.
+ * Sentinel trigger (Ruling 28): a currency prefix followed by digits ANYWHERE (no letter
+ * lookbehind: "ProfitRp 9", "totalrp9"), or any whole currency/scale word ("Rp", "juta", "IDR").
+ * Deliberately looser than the parser: tripping only buffers text, it never replaces it.
  */
 export const CURRENCY_MARKER_RE = new RegExp(
-  String.raw`(?<![a-z])(?:${byLength([...CURRENCY_PREFIXES, ...Object.keys(SCALE)])})(?![a-z])|(?:${PREFIX})(?=\d)`,
+  String.raw`(?:${PREFIX})\.?\s*\d|(?<![a-z])(?:${byLength([...CURRENCY_PREFIXES, ...Object.keys(SCALE)])})(?![a-z])`,
   "i",
 );
 
-// [sign: "-" | "rugi [filler words]"] [Rp|IDR [-] | glued Rp|IDR] number [glued Rp|IDR | suffix]
+/** A dangling currency prefix at the end of streamed text ("ProfitRp ", "totalrp."): hold it. */
+export const CURRENCY_TAIL_RE = new RegExp(String.raw`(?:${PREFIX})\.?\s*$`, "i");
+
+// [sign: "-" | "rugi [filler words]"] [Rp|IDR [-] | glued Rp|IDR] number [Rp|IDR | suffix]
 const AMOUNT_RE = new RegExp(
   [
     String.raw`(?<neg>-\s*|\brugi(?:\s+[a-z]+){0,2}?\s+)?`,
     // A prefix glued to a preceding word ("totalRp2.550.000") must touch the digits and is
-    // checked for capitalisation below, so "Corp 5" / "corp5" stay non-amounts.
+    // checked for capitalisation below, so "Corp 5" / "corp5" stay non-amounts in raw text.
     String.raw`(?:(?:(?<![a-z])(?<cur>${PREFIX})\.?\s*|(?<glued>${PREFIX})(?=\d))(?<neg2>-\s*)?)?`,
     String.raw`(?<num>\d+(?:[.,]\d+)*)`,
-    String.raw`(?:(?<post>${PREFIX})(?![a-z])|\s*(?<suf>${SUFFIX})(?![a-z]))?`,
+    // Rp/IDR after the number, glued or spaced ("2550000IDR", "9.999.000 IDR"), unless it is the
+    // prefix of a following amount ("5 Rp10.000").
+    String.raw`(?:\s*(?<post>${PREFIX})(?![a-z])(?!\.?\s*\d)|\s*(?<suf>${SUFFIX})(?![a-z]))?`,
   ].join(""),
   "gi",
 );
+
+// Letter directly before a currency prefix that is followed by digits ("ProfitRp 9", "totalrp9").
+const GLUED_PREFIX_RE = new RegExp(String.raw`([a-z])(?=(?:${PREFIX})\.?\s*\d)`, "gi");
+// Every currency-tagged digit position the backstop requires an amount for.
+const BACKSTOP_RE = new RegExp(String.raw`(?:${PREFIX})\.?\s*\d|\d\s*(?:${PREFIX})\b`, "gi");
+
+/**
+ * Ruling 28: guardrail input is parsed from a normalized copy, so spacing and case cannot hide an
+ * amount. A space is inserted between a letter and a following Rp/IDR when digits follow.
+ */
+export function normalizeForGuardrail(text: string): string {
+  return text.replace(GLUED_PREFIX_RE, "$1 ");
+}
 
 function parseNumber(raw: string): number | null {
   const commas = raw.split(",").length - 1;
@@ -75,23 +92,47 @@ function parseNumber(raw: string): number | null {
   return Number.isFinite(n) ? n : null;
 }
 
-export function parseRupiahAmountsDetailed(text: string): ParsedAmount[] {
-  const out: ParsedAmount[] = [];
+type Located = { amount: ParsedAmount; start: number; end: number };
+
+function scan(text: string): Located[] {
+  const out: Located[] = [];
   for (const m of text.matchAll(AMOUNT_RE)) {
     const g = m.groups!;
     const suf = g.suf?.toLowerCase();
     if (g.glued && !/^(?:Rp|RP|IDR)$/.test(g.glued)) continue; // "corp5": a word, not a currency
     if (!g.cur && !g.glued && !g.post && !suf) continue; // bare numbers are not amounts
+    const at = { start: m.index!, end: m.index! + m[0].length };
     const base = parseNumber(g.num!);
     if (base === null) {
       // Fail closed: a currency-tagged amount we cannot read must not pass the guardrail.
-      out.push({ value: NaN, scaled: false, viaRugi: false });
+      out.push({ amount: { value: NaN, scaled: false, viaRugi: false }, ...at });
       continue;
     }
     let value = Math.round(base * (suf ? SCALE[suf]! : 1) * 100) / 100;
     const viaRugi = !!g.neg && /^rugi/i.test(g.neg);
     if ((g.neg && !viaRugi) || g.neg2 || viaRugi) value = -value;
-    out.push({ value: value === 0 ? 0 : value, scaled: !!suf && SCALE[suf]! >= 1e6, viaRugi });
+    out.push({ amount: { value: value === 0 ? 0 : value, scaled: !!suf && SCALE[suf]! >= 1e6, viaRugi }, ...at });
+  }
+  return out;
+}
+
+export function parseRupiahAmountsDetailed(text: string): ParsedAmount[] {
+  return scan(text).map((l) => l.amount);
+}
+
+/**
+ * Amounts for the guardrail (Ruling 28): parses the normalized text, then adds NaN for every
+ * currency+digit position (`Rp 9`, `9 IDR`, any case) that no parsed amount covers, so an
+ * unrecognised form forces replacement instead of passing.
+ */
+export function parseGuardrailAmounts(text: string): ParsedAmount[] {
+  const normalized = normalizeForGuardrail(text);
+  const located = scan(normalized);
+  const out = located.map((l) => l.amount);
+  for (const m of normalized.matchAll(BACKSTOP_RE)) {
+    const start = m.index!;
+    const end = start + m[0].length;
+    if (!located.some((l) => l.start < end && start < l.end)) out.push({ value: NaN, scaled: false, viaRugi: false });
   }
   return out;
 }

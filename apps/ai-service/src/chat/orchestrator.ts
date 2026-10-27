@@ -3,7 +3,7 @@ import type { AuditWriter } from "../audit.js";
 import { EMPTY, FORBIDDEN, NO_DATA, NOT_FOUND, UPSTREAM } from "../copy.js";
 import type { AdapterName } from "../llm/gateway.js";
 import type { LlmAdapter, LlmMessage, LlmToolCall } from "../llm/types.js";
-import { parseRupiahAmounts } from "../money.js";
+import { parseGuardrailAmounts } from "../money.js";
 import { applyProfitGuardrail, type LabeledReport } from "../profit/guardrail.js";
 import type { PosAdapter } from "../profit/posAdapter.js";
 import type { RetrievedChunk } from "../rag/retriever.js";
@@ -198,7 +198,7 @@ export async function runChat(
       guardrailReplaced = g.replaced;
       if (g.replaced) emitReplacement(g.text);
       else emitText(g.text);
-    } else if (parseRupiahAmounts(held).length > 0) {
+    } else if (parseGuardrailAmounts(held).length > 0) {
       guardrailReplaced = noDataReplaced = true;
       emitReplacement(failureCopy(toolCalls));
     } else {
