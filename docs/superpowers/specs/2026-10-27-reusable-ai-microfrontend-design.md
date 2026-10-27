@@ -256,5 +256,6 @@ Ingestion is asynchronous inside ai-service: upload, then `processing`, then par
 ## 10. Open items (not blocking the build)
 
 - Compliance: external LLM use, Supabase region, audit/conversation retention, vendor ZDR/no-training (questions in `HANDOFF.md`).
+- Compliance: `knowledge_gaps.question` retains end-user text beyond the 90-day purge (the purge deletes conversations and messages only). Decide a retention period or redaction for it (Ruling 50).
 - POS team: profit definition questions (refunds, discounts, VAT, missing HPP) and a staging endpoint.
 - Production LLM choice once compliance answers. Switching is a config change in `assistants`.
