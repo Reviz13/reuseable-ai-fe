@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import rateLimit from "@fastify/rate-limit";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { AppIdSchema, type AppId, type JwtClaims } from "@ai/contracts";
 import { AuthError } from "./auth/errors.js";
@@ -11,6 +12,12 @@ import { createCorsOriginLookup } from "./cors.js";
 import type { Db } from "./db.js";
 import type { Embedder } from "./rag/embedder.js";
 import { registerKnowledgeRoutes } from "./admin/knowledge.js";
+import { registerChatRoutes } from "./chat/routes.js";
+import { HttpError } from "./http.js";
+import type { LlmAdapter } from "./llm/types.js";
+import type { AdapterName } from "./llm/gateway.js";
+import type { PosAdapter } from "./profit/posAdapter.js";
+import { registerPublicRoutes, registerWidgetStatic } from "./public/routes.js";
 
 export interface AppDeps {
   config: Config;
@@ -19,10 +26,12 @@ export interface AppDeps {
   verifyEndUser: EndUserVerifier;
   verifyAdmin: AdminVerifier;
   now: () => Date;
-  // Placeholders, tightened by later tasks.
-  gatewayFor?: unknown;
+  /** Required by POST /v1/chat. */
+  gatewayFor?: (assistant: { llm_adapter: AdapterName; fallback_adapter: AdapterName | null }) => LlmAdapter;
+  /** Required by knowledge ingestion and chat retrieval. Without it chat runs with no knowledge. */
   embedder?: Embedder;
-  pos?: unknown;
+  /** Required by the get_profit tool. */
+  pos?: PosAdapter;
 }
 
 type Guard = (req: FastifyRequest, reply: FastifyReply) => Promise<void>;
@@ -66,11 +75,20 @@ export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): Fasti
       const url = req.url ?? "";
       if (!url.startsWith("/v1/")) return cb(null, { origin: false });
       const origin = req.headers.origin;
-      const seg = /^\/v1\/([^/?]+)/.exec(url)?.[1];
-      const parsedApp = AppIdSchema.safeParse(seg);
-      if (!origin || !parsedApp.success) return cb(null, { origin: false });
-      const appId = parsedApp.data;
-      corsLookup.allowedOrigins(appId).then(
+      if (!origin) return cb(null, { origin: false });
+      const path = url.split("?")[0]!;
+      let lookup: Promise<string[]>;
+      if (path === "/v1/chat" || path === "/v1/feedback") {
+        // The app is only in the body, which preflights do not carry. The per-app JWT (iss == app)
+        // still gates access, so the union of all assistants' origins is used here.
+        lookup = corsLookup.anyAllowedOrigins();
+      } else {
+        const seg = /^\/v1\/assistants\/([^/]+)/.exec(path)?.[1] ?? /^\/v1\/([^/]+)/.exec(path)?.[1];
+        const parsedApp = AppIdSchema.safeParse(seg);
+        if (!parsedApp.success) return cb(null, { origin: false });
+        lookup = corsLookup.allowedOrigins(parsedApp.data);
+      }
+      lookup.then(
         (allowed) => cb(null, { origin: allowed.includes(origin), credentials: false }),
         (err) => cb(err as Error, { origin: false }),
       );
@@ -79,6 +97,7 @@ export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): Fasti
 
   app.setErrorHandler((err: Error, _req, reply) => {
     if (err instanceof AuthError) return reply.code(401).send({ error: "unauthorized" });
+    if (err instanceof HttpError && err.body) return reply.code(err.statusCode).send(err.body);
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status < 500) {
       const issues = (err as { issues?: unknown }).issues;
@@ -102,6 +121,13 @@ export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): Fasti
 
   void app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   registerKnowledgeRoutes(app);
+  // Rate limiting is opt-in per route (config.rateLimit); the plugin must load before those routes.
+  void app.register(rateLimit, { global: false });
+  void app.register(async (scope) => {
+    registerChatRoutes(scope);
+    registerPublicRoutes(scope);
+  });
+  void app.register(async (scope) => registerWidgetStatic(scope, deps.config?.widgetDir));
 
   app.get("/healthz", async () => ({ ok: true }));
   return app;

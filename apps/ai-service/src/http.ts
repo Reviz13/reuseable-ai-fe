@@ -5,6 +5,8 @@ export class HttpError extends Error {
     public statusCode: number,
     message: string,
     public issues?: { path: (string | number)[]; code: string }[],
+    /** When set, sent verbatim as the response body. */
+    public body?: Record<string, unknown>,
   ) {
     super(message);
   }

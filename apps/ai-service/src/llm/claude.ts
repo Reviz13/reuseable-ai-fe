@@ -32,7 +32,7 @@ export function toAnthropicMessages(messages: LlmMessage[]): AnthropicMessage[] 
 }
 
 export function createClaudeAdapter(apiKey: string, opts: { client?: ClaudeClientLike } = {}): LlmAdapter {
-  const client: ClaudeClientLike = opts.client ?? (new Anthropic({ apiKey }) as unknown as ClaudeClientLike);
+  const client: ClaudeClientLike = opts.client ?? (new Anthropic({ apiKey, maxRetries: 0 }) as unknown as ClaudeClientLike);
   return {
     async *stream(req: LlmRequest): AsyncGenerator<LlmChunk> {
       const events = client.messages.stream(

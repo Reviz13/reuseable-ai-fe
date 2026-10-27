@@ -105,6 +105,21 @@ describe("get_profit tool", () => {
     await expect(getProfitTool.run({ period: "today" }, ctx)).rejects.toThrow();
   });
 
+  it("parent-signal abort during the POS call is audited ABORTED, then rethrown (Ruling 15)", async () => {
+    const ac = new AbortController();
+    const { audits, ctx } = setup("owner", async () => {
+      ac.abort();
+      throw new DOMException("aborted", "AbortError");
+    });
+    await expect(getProfitTool.run({ period: "today" }, { ...ctx, signal: ac.signal })).rejects.toThrow();
+    expect(audits).toHaveLength(1);
+    expect(audits[0]).toMatchObject({
+      outcome: "error",
+      error_code: "ABORTED",
+      params: { period: "today", from: "2026-10-27", to: "2026-10-27" },
+    });
+  });
+
   it("tool JSON schema exposes no outlet_id/user_id/role", () => {
     const spec = toJsonSchema(getProfitTool);
     expect(spec.name).toBe("get_profit");

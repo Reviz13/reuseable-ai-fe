@@ -5,6 +5,9 @@ import { createEndUserVerifier } from "./auth/endUser.js";
 import { createSupabaseBlobStore } from "./blob.js";
 import { loadConfig } from "./config.js";
 import { createPgDb } from "./db.js";
+import { createGatewayFor } from "./llm/gateway.js";
+import { createPosAdapter } from "./profit/posAdapter.js";
+import { createLocalEmbedder } from "./rag/embedder.js";
 
 const config = loadConfig(process.env);
 const db = createPgDb(config.databaseUrl);
@@ -25,6 +28,9 @@ const app = createApp({
     },
   }),
   now: () => new Date(),
+  embedder: createLocalEmbedder(),
+  gatewayFor: createGatewayFor(config),
+  pos: createPosAdapter({ baseUrl: config.posBaseUrl, internalKey: config.posInternalKey }),
 }, { logger: true });
 
 app.addHook("onClose", async () => {

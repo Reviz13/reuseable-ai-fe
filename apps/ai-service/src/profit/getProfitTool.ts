@@ -44,7 +44,12 @@ async function run(args: GetProfitArgs, ctx: ToolCtx): Promise<ToolResult<Data>>
     await audit("ok");
     return { ok: true, data: { report, label: period.label } };
   } catch (err) {
-    if (!(err instanceof UpstreamError)) throw err; // aborts and bugs propagate
+    if (ctx.signal.aborted) {
+      // Client disconnect: every POS call is audited, then the abort propagates.
+      await audit("error", "ABORTED");
+      throw err;
+    }
+    if (!(err instanceof UpstreamError)) throw err; // bugs propagate
     await audit("error", "UPSTREAM_ERROR");
     return { ok: false, code: "UPSTREAM_ERROR", message: UPSTREAM_MSG };
   }
