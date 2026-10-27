@@ -80,3 +80,31 @@ export async function ingestVersion(deps: IngestDeps, input: IngestInput): Promi
     throw err;
   }
 }
+
+/** A version still without chunks this long after upload was cut off (S7). */
+export const INTERRUPTED_AFTER_MINUTES = 10;
+export const INTERRUPTED = "interrupted";
+
+/**
+ * S7 startup sweeper: ingestion runs in-process, so a restart mid-ingest leaves versions with no
+ * error and no chunks forever. Marks those older than 10 minutes as error 'interrupted'; their
+ * documents become failed unless they still serve an active version. Returns the versions marked.
+ */
+export async function sweepInterruptedVersions(db: Db): Promise<number> {
+  return withTransaction(db, async (tx) => {
+    const swept = await tx.query<{ id: string; document_id: string }>(
+      `update document_versions v set error = $1
+        where v.error is null
+          and v.created_at < now() - make_interval(mins => $2)
+          and not exists (select 1 from chunks c where c.version_id = v.id)
+        returning v.id, v.document_id`,
+      [INTERRUPTED, INTERRUPTED_AFTER_MINUTES],
+    );
+    if (swept.length === 0) return 0;
+    await tx.query(
+      `update documents set status = 'failed' where id = any($1::uuid[]) and active_version_id is null`,
+      [[...new Set(swept.map((r) => r.document_id))]],
+    );
+    return swept.length;
+  });
+}

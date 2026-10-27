@@ -1,4 +1,4 @@
-import type { Config } from "../config.js";
+import { isDevEnv, type Config } from "../config.js";
 import { readFileSync } from "node:fs";
 import { createClaudeAdapter } from "./claude.js";
 import { createScriptFileAdapter } from "./fake.js";
@@ -63,9 +63,9 @@ function unavailable(message: string): LlmAdapter {
 export function createGatewayFor(
   config: Config,
 ): (assistant: { llm_adapter: AdapterName; fallback_adapter: AdapterName | null }) => LlmAdapter {
-  // Test hook (brief Task 15 / Ruling 45): every assistant gets the scripted fake. loadConfig already drops
-  // LLM_FAKE_SCRIPT when NODE_ENV=production; checked again here so the hook can never reach production.
-  if (config.llmFakeScript && process.env.NODE_ENV !== "production") {
+  // Test hook (brief Task 15 / Ruling 45): every assistant gets the scripted fake. loadConfig already refuses
+  // LLM_FAKE_SCRIPT outside NODE_ENV development/test; checked again here (Ruling 48 allowlist).
+  if (config.llmFakeScript && isDevEnv(process.env.NODE_ENV)) {
     const fake = createScriptFileAdapter(config.llmFakeScript, (p) => readFileSync(p, "utf8"));
     return () => fake;
   }

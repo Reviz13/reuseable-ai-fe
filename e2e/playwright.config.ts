@@ -4,8 +4,8 @@ import { E2E_INTERNAL_KEY, FAKE_SCRIPT_PATH } from "./profit";
 
 /**
  * Ruling 45: local E2E. No Supabase, no LLM key, no Docker.
- * - mock-pos      :4100  INTERNAL_KEY=e2e
- * - ai-service    :4000  LOCAL_MODE=1 (in-process PGlite + seed, memory blobs, hash embedder),
+ * - mock-pos      :4100  INTERNAL_KEY=e2e, MOCK_POS_PORT=4100 (M2: never PORT)
+ * - ai-service    :4000  NODE_ENV=development + LOCAL_MODE=1 (Ruling 48; in-process PGlite + seed, memory blobs, hash embedder),
  *                        LLM_FAKE_SCRIPT=e2e/fake-script.json (written by global-setup from live mock-pos data)
  * - studio        :3000  next dev, /demo/pos + /api/demo-token (DEMO_ENABLED=1), dummy Supabase env
  * Servers are started with npx/tsx directly (pnpm need not be on PATH). The widget must be built first
@@ -40,7 +40,7 @@ export default defineConfig({
       command: "npx tsx src/index.ts",
       cwd: resolve(root, "apps/mock-pos"),
       url: "http://localhost:4100/.well-known/jwks.json",
-      env: { INTERNAL_KEY: E2E_INTERNAL_KEY, PORT: "4100" },
+      env: { NODE_ENV: "development", INTERNAL_KEY: E2E_INTERNAL_KEY, MOCK_POS_PORT: "4100" },
       reuseExistingServer: false,
       timeout: 60_000,
       stdout: "ignore",
@@ -72,6 +72,7 @@ export default defineConfig({
       cwd: resolve(root, "apps/studio"),
       url: "http://localhost:3000/demo/pos",
       env: {
+        NODE_ENV: "development",
         AI_SERVICE_URL: "http://localhost:4000",
         MOCK_POS_URL: "http://localhost:4100",
         DEMO_ENABLED: "1",

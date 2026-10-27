@@ -74,3 +74,12 @@ export function buildServer({ keys, internalKey, now }: ServerDeps): FastifyInst
 
   return app;
 }
+
+/**
+ * M2: mock-pos listens on MOCK_POS_PORT (default 4100). It never reads PORT, which the shared root
+ * .env sets to 4000 for ai-service.
+ */
+export function mockPosPort(env: Record<string, string | undefined>): number {
+  const raw = env.MOCK_POS_PORT;
+  return raw ? Number(raw) : 4100;
+}

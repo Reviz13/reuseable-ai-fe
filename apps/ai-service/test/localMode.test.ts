@@ -2,7 +2,7 @@ import { mkdtempSync, readFileSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { describe, expect, it } from "vitest";
-import { loadConfig } from "../src/config.js";
+import { isDevEnv, loadConfig } from "../src/config.js";
 import { createScriptFileAdapter, pickScriptedRound } from "../src/llm/fake.js";
 import { createGatewayFor } from "../src/llm/gateway.js";
 import type { LlmChunk, LlmRequest } from "../src/llm/types.js";
@@ -13,9 +13,11 @@ const BASE = {
   POS_INTERNAL_KEY: "ik",
 };
 
-describe("LOCAL_MODE config (Ruling 45)", () => {
+describe("LOCAL_MODE config (Rulings 45/48)", () => {
+  const DEV = { ...BASE, NODE_ENV: "development" };
+  const FULL = { ...BASE, DATABASE_URL: "postgres://x", SUPABASE_URL: "http://s", SUPABASE_SERVICE_ROLE_KEY: "k" };
   it("relaxes DATABASE_URL / SUPABASE_* in local mode", () => {
-    const c = loadConfig({ ...BASE, LOCAL_MODE: "1" });
+    const c = loadConfig({ ...DEV, LOCAL_MODE: "1" });
     expect(c.localMode).toBe(true);
     expect(c.databaseUrl).toBe("");
     expect(c.supabaseUrl).toBe("");
@@ -23,20 +25,25 @@ describe("LOCAL_MODE config (Ruling 45)", () => {
   it("still requires them outside local mode", () => {
     expect(() => loadConfig(BASE)).toThrow(/DATABASE_URL/);
   });
-  it("refuses LOCAL_MODE when NODE_ENV=production", () => {
-    expect(() => loadConfig({ ...BASE, LOCAL_MODE: "1", NODE_ENV: "production" })).toThrow(/production/);
+  it.each(["development", "test"])("allows LOCAL_MODE and LLM_FAKE_SCRIPT when NODE_ENV=%s", (NODE_ENV) => {
+    const c = loadConfig({ ...BASE, NODE_ENV, LOCAL_MODE: "1", LLM_FAKE_SCRIPT: "x.json" });
+    expect(c.localMode).toBe(true);
+    expect(c.llmFakeScript).toBe("x.json");
   });
-  it("drops LLM_FAKE_SCRIPT in production", () => {
-    const prod = loadConfig({
-      ...BASE,
-      DATABASE_URL: "postgres://x",
-      SUPABASE_URL: "http://s",
-      SUPABASE_SERVICE_ROLE_KEY: "k",
-      NODE_ENV: "production",
-      LLM_FAKE_SCRIPT: "x.json",
-    });
-    expect(prod.llmFakeScript).toBeUndefined();
-    expect(loadConfig({ ...BASE, LOCAL_MODE: "1", LLM_FAKE_SCRIPT: "x.json" }).llmFakeScript).toBe("x.json");
+  it.each([undefined, "production", "staging", ""])("refuses LOCAL_MODE when NODE_ENV=%j (Ruling 48: allowlist, fail closed)", (NODE_ENV) => {
+    expect(() => loadConfig({ ...BASE, NODE_ENV, LOCAL_MODE: "1" })).toThrow(/NODE_ENV/);
+  });
+  it.each([undefined, "production"])("refuses LLM_FAKE_SCRIPT when NODE_ENV=%j", (NODE_ENV) => {
+    expect(() => loadConfig({ ...FULL, NODE_ENV, LLM_FAKE_SCRIPT: "x.json" })).toThrow(/NODE_ENV/);
+  });
+  it("a normal config needs no NODE_ENV", () => {
+    expect(loadConfig(FULL).localMode).toBe(false);
+    expect(loadConfig({ ...FULL, NODE_ENV: "production" }).llmFakeScript).toBeUndefined();
+  });
+  it("isDevEnv is an allowlist", () => {
+    expect(isDevEnv("development")).toBe(true);
+    expect(isDevEnv("test")).toBe(true);
+    for (const v of [undefined, "", "production", "dev"]) expect(isDevEnv(v)).toBe(false);
   });
 });
 
@@ -76,7 +83,7 @@ describe("fake script by user message", () => {
     const dir = mkdtempSync(join(tmpdir(), "fake-llm-"));
     const path = join(dir, "s.json");
     writeFileSync(path, JSON.stringify([[{ type: "text", text: "a" }]]));
-    const gw = createGatewayFor({ ...loadConfig({ ...BASE, LOCAL_MODE: "1" }), llmFakeScript: path });
+    const gw = createGatewayFor({ ...loadConfig({ ...BASE, NODE_ENV: "test", LOCAL_MODE: "1" }), llmFakeScript: path });
     const req: LlmRequest = { model: "m", system: "", messages: [{ role: "user", content: "q" }], tools: [], signal: new AbortController().signal };
     const out: LlmChunk[] = [];
     for await (const c of gw({ llm_adapter: "claude", fallback_adapter: null }).stream(req)) out.push(c);

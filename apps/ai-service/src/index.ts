@@ -8,13 +8,11 @@ import { loadConfig, type Config } from "./config.js";
 import { createPgDb } from "./db.js";
 import { createGatewayFor } from "./llm/gateway.js";
 import { createPosAdapter } from "./profit/posAdapter.js";
-import { createHashEmbedder, createLocalEmbedder } from "./rag/embedder.js";
+import { createHashEmbedder, createLocalEmbedder, type Embedder } from "./rag/embedder.js";
+import { sweepInterruptedVersions } from "./rag/ingest.js";
+import { afterListen, installGracefulShutdown } from "./startup.js";
 
-if (process.env.LOCAL_MODE === "1" && process.env.NODE_ENV === "production") {
-  console.error("LOCAL_MODE=1 is dev-only and refused when NODE_ENV=production");
-  process.exit(1);
-}
-
+// Ruling 48: loadConfig refuses LOCAL_MODE / LLM_FAKE_SCRIPT unless NODE_ENV is development or test.
 let config: Config;
 try {
   config = loadConfig(process.env);
@@ -23,10 +21,10 @@ try {
   process.exit(1);
 }
 
-type Wiring = Pick<AppDeps, "db" | "blob" | "verifyAdmin" | "embedder"> & { close(): Promise<void> };
+type Wiring = Pick<AppDeps, "db" | "blob" | "verifyAdmin"> & { embedder: Embedder; close(): Promise<void> };
 
 async function productionWiring(c: Config): Promise<Wiring> {
-  const db = createPgDb(c.databaseUrl);
+  const db = createPgDb(c.databaseUrl, { DATABASE_SSL: c.databaseSsl, DATABASE_SSL_CA: c.databaseSslCa });
   const supabase = createClient(c.supabaseUrl, c.supabaseServiceKey, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
@@ -80,5 +78,13 @@ app.addHook("onClose", async () => {
   await wiring.close();
 });
 
+installGracefulShutdown(app, process, (code) => process.exit(code), app.log);
+
 await app.listen({ host: "0.0.0.0", port: config.port });
 console.log(`ai-service listening on :${config.port}`);
+await afterListen({
+  localMode: config.localMode,
+  embedder: wiring.embedder,
+  sweep: () => sweepInterruptedVersions(wiring.db),
+  log: app.log,
+});

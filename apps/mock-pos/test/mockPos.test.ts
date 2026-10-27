@@ -93,3 +93,12 @@ describe("token + jwks", () => {
     expect(bad.statusCode).toBe(400);
   });
 });
+
+describe("mockPosPort (M2)", () => {
+  it("reads MOCK_POS_PORT and ignores the shared PORT", async () => {
+    const { mockPosPort } = await import("../src/server");
+    expect(mockPosPort({ PORT: "4000" })).toBe(4100);
+    expect(mockPosPort({ PORT: "4000", MOCK_POS_PORT: "4200" })).toBe(4200);
+    expect(mockPosPort({ MOCK_POS_PORT: "" })).toBe(4100);
+  });
+});
