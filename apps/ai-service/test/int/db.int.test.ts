@@ -16,10 +16,16 @@ afterAll(async () => {
 
 const vec = (x: number): string => `[${Array.from({ length: 384 }, (_, i) => (i === 0 ? x : 0.1)).join(",")}]`;
 
-async function seedDoc(app: string, versions: number[], activeVersion: number, e: string): Promise<void> {
+async function seedDoc(
+  app: string,
+  versions: number[],
+  activeVersion: number,
+  e: string,
+  status = "ready",
+): Promise<void> {
   const [doc] = await db.query<{ id: string }>(
-    "insert into documents (app, kind, title, status) values ($1, 'file', $2, 'ready') returning id",
-    [app, `${app}-doc`],
+    "insert into documents (app, kind, title, status) values ($1, 'file', $2, $3) returning id",
+    [app, `${app}-doc`, status],
   );
   for (const v of versions) {
     const [ver] = await db.query<{ id: string }>(
@@ -79,7 +85,18 @@ describe("db", () => {
   });
 
   it("match_chunks applies min_score", async () => {
-    const rows = await db.query("select * from match_chunks($1, $2::vector, 6, 0.999)", ["pos", vec(-5)]);
+    await seedDoc("minscore", [1], 1, vec(0.5));
+    const q = `[${Array.from({ length: 384 }, (_, i) => (i === 0 ? 0.1 : -0.5)).join(",")}]`;
+    const all = await db.query("select * from match_chunks($1, $2::vector, 6, -1)", ["minscore", q]);
+    expect(all).toHaveLength(1);
+    const none = await db.query("select * from match_chunks($1, $2::vector, 6, 0.999)", ["minscore", q]);
+    expect(none).toHaveLength(0);
+  });
+
+  it("match_chunks excludes documents that are not ready", async () => {
+    const e = vec(0.3);
+    await seedDoc("notready", [1], 1, e, "processing");
+    const rows = await db.query("select * from match_chunks($1, $2::vector, 6, 0)", ["notready", e]);
     expect(rows).toHaveLength(0);
   });
 
@@ -94,7 +111,7 @@ describe("db", () => {
     } finally {
       await pg.exec("rollback");
     }
-    expect(msg).toMatch(/append-only|permission denied/);
+    expect(msg).toMatch(/permission denied/);
   });
 
   it("audit_log update and delete fail even for the table owner (trigger)", async () => {

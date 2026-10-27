@@ -31,6 +31,6 @@ as $$
     and c.app = p_app
     and d.status = 'ready'
     and (1 - (c.embedding <=> p_embedding)) >= p_min_score
-  order by score desc
+  order by c.embedding <=> p_embedding
   limit p_k;
 $$;

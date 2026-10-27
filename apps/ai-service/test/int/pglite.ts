@@ -29,12 +29,12 @@ create schema cron;
 create function cron.schedule(text, text, text) returns bigint language sql as $$ select 1::bigint $$;
 `;
 
-// Test-only grants so that RLS (not missing privileges) is what blocks anon,
-// and so audit_log trigger/revoke behaviour can be exercised as service_role.
-const TEST_GRANTS = `
+// Mimic Supabase default privileges (set before migrations) so that RLS, and the revoke in
+// 0003, are what actually block access, not missing grants.
+const DEFAULT_PRIVS = `
 grant usage on schema public to anon, authenticated, service_role;
-grant select on all tables in schema public to anon, authenticated;
-grant select, insert, update, delete on all tables in schema public to service_role;
+alter default privileges in schema public grant select, insert, update, delete on tables to service_role;
+alter default privileges in schema public grant select on tables to anon, authenticated;
 `;
 
 function stripPgCron(sql: string): string {
@@ -47,6 +47,7 @@ function stripPgCron(sql: string): string {
 export async function createTestDb(): Promise<{ db: Db; pg: PGlite; close(): Promise<void> }> {
   const pg = new PGlite({ extensions: { vector } });
   await pg.exec(STUBS);
+  await pg.exec(DEFAULT_PRIVS);
   const files = readdirSync(join(supabaseDir, "migrations"))
     .filter((f) => f.endsWith(".sql"))
     .sort();
@@ -54,9 +55,5 @@ export async function createTestDb(): Promise<{ db: Db; pg: PGlite; close(): Pro
     await pg.exec(stripPgCron(readFileSync(join(supabaseDir, "migrations", f), "utf8")));
   }
   await pg.exec(readFileSync(join(supabaseDir, "seed.sql"), "utf8"));
-  // Applied after migrations: grants on audit_log from the migration's revoke must still win,
-  // so re-apply the revoke the same way Supabase's default privileges would not.
-  await pg.exec(TEST_GRANTS);
-  await pg.exec("revoke update, delete on audit_log from anon, authenticated, service_role;");
   return { db: pgliteDb(pg), pg, close: () => pg.close() };
 }
