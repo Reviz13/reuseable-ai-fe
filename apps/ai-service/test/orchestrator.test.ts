@@ -3,7 +3,10 @@ import type { JwtClaims, ProfitReport, SseEvent } from "@ai/contracts";
 import type { AuditEntry } from "../src/audit.js";
 import { buildSystemPrompt } from "../src/chat/prompt.js";
 import { runChat, type AssistantRow, type ChatDeps } from "../src/chat/orchestrator.js";
-import { NOT_FOUND } from "../src/copy.js";
+import { EMPTY, FORBIDDEN, NO_DATA, NOT_FOUND, UPSTREAM } from "../src/copy.js";
+import { withFallback } from "../src/llm/gateway.js";
+import { createPosAdapter, UpstreamError } from "../src/profit/posAdapter.js";
+import { normalizeHistory } from "../src/chat/orchestrator.js";
 import { createFakeAdapter } from "../src/llm/fake.js";
 import type { LlmAdapter, LlmChunk } from "../src/llm/types.js";
 import type { PosAdapter } from "../src/profit/posAdapter.js";
@@ -83,7 +86,9 @@ const input = (role = "owner", message = "berapa profit minggu ini?") => ({
   history: [],
 });
 
-const summary = (events: SseEvent[]) =>
+const tokens = (events: SseEvent[]) => events.filter((e) => e.type === "token").map((e) => (e as { text: string }).text);
+
+const summary =(events: SseEvent[]) =>
   events.map((e) =>
     e.type === "state" ? `state ${e.avatar}` : e.type === "tool" ? `tool ${e.status}` : e.type,
   );
@@ -208,6 +213,7 @@ describe("runChat", () => {
       "state talking",
       "token",
       "token",
+      "token",
       "citation",
       "citation",
       "state happy",
@@ -299,5 +305,198 @@ describe("runChat", () => {
     const r = await runChat(s.deps, input(), s.emit, new AbortController().signal);
     expect(llm.calls).toHaveLength(3);
     expect(r).not.toBeNull();
+    expect(r!.text).toBe(EMPTY);
+    expect(r!.avatarFinal).toBe("sad");
+    expect(tokens(s.events)).toEqual([EMPTY]);
+    expect(s.events.at(-1)).toEqual({ type: "state", avatar: "sad" });
+  });
+});
+
+describe("runChat rupiah sentinel and failed-tool guardrail (Ruling 25)", () => {
+  const fresh = () => new AbortController().signal;
+
+  it("UPSTREAM_ERROR then an invented figure -> UPSTREAM copy, digits never emitted", async () => {
+    const llm = createFakeAdapter([
+      [call({ period: "this_week" }), end("tool_use")],
+      [text("Profit sekitar "), text("Rp5.000.000"), end()],
+    ]);
+    const s = setup({
+      llm,
+      getProfit: async () => {
+        throw new UpstreamError("down");
+      },
+    });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    expect(tokens(s.events).join("")).not.toContain("5.000.000");
+    expect(r!.text).toBe(UPSTREAM);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("FORBIDDEN then a rupiah figure -> FORBIDDEN copy", async () => {
+    const llm = createFakeAdapter([
+      [call({ period: "today" }), end("tool_use")],
+      [text("Profit hari ini Rp1.000.000."), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("cashier"), s.emit, fresh());
+    expect(tokens(s.events).join("")).not.toContain("1.000.000");
+    expect(r!.text).toBe(FORBIDDEN);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("no tool call but an invented profit figure -> NO_DATA copy, digits never emitted", async () => {
+    const llm = createFakeAdapter([[text("Profit "), text("minggu ini "), text("Rp2.550.000"), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    const all = tokens(s.events).join("");
+    expect(all).not.toContain("2.550.000");
+    expect(all).toContain("Profit minggu ini ");
+    expect(r!.text).toBe(`Profit minggu ini ${NO_DATA}`);
+    expect(tokens(s.events).at(-1)).toBe(NO_DATA);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("marker split across chunks (R | p2.550.000) never leaks digits", async () => {
+    const llm = createFakeAdapter([[text("Profit minggu ini R"), text("p2.550.000."), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    for (const t of tokens(s.events)) expect(t).not.toMatch(/\d/);
+    expect(r!.guardrailReplaced).toBe(true);
+  });
+
+  it("a number held until its suffix arrives (2.550.000 | juta) never leaks", async () => {
+    const llm = createFakeAdapter([[text("Profitnya 2.550.000 "), text("juta"), end()]]);
+    const s = setup({ llm });
+    await runChat(s.deps, input(), s.emit, fresh());
+    for (const t of tokens(s.events)) expect(t).not.toContain("2.550.000");
+  });
+
+  it("preamble streams, then the tool's correct figure passes the guardrail", async () => {
+    const llm = createFakeAdapter([
+      [text("Saya cek "), text("dulu ya."), call({ period: "this_week" }), end("tool_use")],
+      [text("Profit minggu ini Rp2.550.000."), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    const t = tokens(s.events);
+    expect(t.slice(0, 3)).toEqual(["Saya cek ", "dulu ", "ya."]); // released at whitespace boundaries
+    expect(t.at(-1)).toContain("Profit minggu ini Rp2.550.000.");
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.avatarFinal).toBe("happy");
+  });
+
+  it("knowledge answer without currency streams token by token", async () => {
+    const llm = createFakeAdapter([[text("Buka menu "), text("Refund, "), text("pilih "), text("transaksi."), end()]]);
+    const s = setup({ llm, chunks: [chunk("a", "d1", 0.9)] });
+    const r = await runChat(s.deps, input("owner", "cara refund?"), s.emit, fresh());
+    expect(tokens(s.events).length).toBeGreaterThan(1);
+    expect(tokens(s.events).join("")).toBe("Buka menu Refund, pilih transaksi.");
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.avatarFinal).toBe("happy");
+  });
+
+  it("marker word without an amount is not replaced", async () => {
+    const llm = createFakeAdapter([[text("Semua harga dalam rupiah ya."), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, fresh());
+    expect(r!.text).toBe("Semua harga dalam rupiah ya.");
+    expect(r!.guardrailReplaced).toBe(false);
+  });
+});
+
+describe("runChat scenarios", () => {
+  it("POS timeout -> UPSTREAM_ERROR tool result, sad", async () => {
+    const pos = createPosAdapter({
+      baseUrl: "http://pos",
+      internalKey: "k",
+      timeoutMs: 5,
+      fetch: (_u, init) =>
+        new Promise<Response>((_, rej) => init!.signal!.addEventListener("abort", () => rej(init!.signal!.reason))),
+    });
+    const llm = createFakeAdapter([
+      [call({ period: "today" }), end("tool_use")],
+      [text("Data profit sedang tidak bisa diambil, coba lagi sebentar."), end()],
+    ]);
+    const s = setup({ llm });
+    s.deps.pos = pos;
+    const r = await runChat(s.deps, input(), s.emit, new AbortController().signal);
+    expect(r!.toolCalls).toEqual([{ name: "get_profit", args: { period: "today" }, ok: false, code: "UPSTREAM_ERROR" }]);
+    expect(s.audits[0]).toMatchObject({ outcome: "error", error_code: "UPSTREAM_ERROR" });
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("LLM fallback: primary fails before the first chunk, fallback answers", async () => {
+    const primary: LlmAdapter = {
+      // eslint-disable-next-line require-yield
+      async *stream() {
+        throw new Error("503");
+      },
+    };
+    const fallback = createFakeAdapter([[text("Halo dari cadangan."), end()]]);
+    const s = setup({ llm: withFallback(primary, fallback, { warn: () => undefined }) });
+    const r = await runChat(s.deps, input("owner", "halo"), s.emit, new AbortController().signal);
+    expect(r!.text).toBe("Halo dari cadangan.");
+    expect(fallback.calls).toHaveLength(1);
+  });
+
+  it("multi-round: text, tool, text, tool, text", async () => {
+    const llm = createFakeAdapter([
+      [text("Saya cek. "), call({ period: "this_week" }, "a"), end("tool_use")],
+      [text("Sudah, cek bulan lalu juga. "), call({ period: "last_month" }, "b"), end("tool_use")],
+      [text("Profit minggu ini Rp2.550.000."), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input(), s.emit, new AbortController().signal);
+    expect(summary(s.events)).toEqual([
+      "state thinking",
+      "state talking",
+      "token",
+      "state thinking",
+      "tool start",
+      "tool ok",
+      "tool start",
+      "tool ok",
+      "state talking",
+      "token",
+      "state happy",
+    ]);
+    expect(tokens(s.events)[1]).toContain("Sudah, cek bulan lalu juga. Profit minggu ini Rp2.550.000.");
+    expect(r!.toolCalls.map((t) => t.ok)).toEqual([true, true]);
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(llm.calls[2]!.messages.filter((m) => m.role === "tool")).toHaveLength(2);
+  });
+});
+
+describe("normalizeHistory", () => {
+  it("drops leading assistant rows and merges consecutive same-role rows", () => {
+    expect(
+      normalizeHistory([
+        { role: "assistant", content: "a0" },
+        { role: "user", content: "u1" },
+        { role: "user", content: "u2" },
+        { role: "assistant", content: "a1" },
+        { role: "user", content: "u3" },
+        { role: "user", content: "baru" },
+      ]),
+    ).toEqual([
+      { role: "user", content: "u1\n\nu2" },
+      { role: "assistant", content: "a1" },
+      { role: "user", content: "u3\n\nbaru" },
+    ]);
+  });
+
+  it("runChat applies it (an aborted turn left a lone user row)", async () => {
+    const llm = createFakeAdapter([[text("ok"), end()]]);
+    const s = setup({ llm });
+    await runChat(
+      s.deps,
+      { ...input("owner", "baru"), history: [{ role: "assistant", content: "x" }, { role: "user", content: "lama" }] },
+      s.emit,
+      new AbortController().signal,
+    );
+    expect(llm.calls[0]!.messages).toEqual([{ role: "user", content: "lama\n\nbaru" }]);
   });
 });

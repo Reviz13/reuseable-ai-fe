@@ -1,13 +1,15 @@
 import type { AppId, AvatarState, JwtClaims, SseEvent } from "@ai/contracts";
 import type { AuditWriter } from "../audit.js";
-import { NOT_FOUND } from "../copy.js";
+import { EMPTY, FORBIDDEN, NO_DATA, NOT_FOUND, UPSTREAM } from "../copy.js";
 import type { AdapterName } from "../llm/gateway.js";
 import type { LlmAdapter, LlmMessage, LlmToolCall } from "../llm/types.js";
+import { parseRupiahAmounts } from "../money.js";
 import { applyProfitGuardrail, type LabeledReport } from "../profit/guardrail.js";
 import type { PosAdapter } from "../profit/posAdapter.js";
 import type { RetrievedChunk } from "../rag/retriever.js";
 import { toJsonSchema, toolsFor, type ToolDef } from "../tools/registry.js";
 import { buildSystemPrompt } from "./prompt.js";
+import { StreamSentinel } from "./sentinel.js";
 
 export const RETRIEVAL_K = 6;
 const MAX_ROUNDS = 3;
@@ -75,9 +77,32 @@ function citationsFrom(chunks: RetrievedChunk[]): Citation[] {
 }
 
 /**
+ * Drops leading assistant rows and merges consecutive same-role rows with a blank line, so that
+ * user rows left by aborted turns never produce shapes strict providers reject.
+ */
+export function normalizeHistory(messages: { role: "user" | "assistant"; content: string }[]): LlmMessage[] {
+  const out: { role: "user" | "assistant"; content: string }[] = [];
+  for (const m of messages) {
+    if (out.length === 0 && m.role === "assistant") continue;
+    const last = out[out.length - 1];
+    if (last && last.role === m.role) last.content = `${last.content}\n\n${m.content}`;
+    else out.push({ role: m.role, content: m.content });
+  }
+  return out;
+}
+
+function failureCopy(toolCalls: ToolCallRecord[]): string {
+  const codes = toolCalls.filter((t) => t.name === "get_profit" && !t.ok).map((t) => t.code);
+  if (codes.includes("FORBIDDEN")) return FORBIDDEN;
+  if (codes.includes("UPSTREAM_ERROR")) return UPSTREAM;
+  return NO_DATA;
+}
+
+/**
  * Runs one chat turn. Resolves null when `signal` aborts (no `done`, nothing to persist).
- * Text produced after any tool call in this turn is buffered and passed through the profit
- * guardrail before it is emitted as one token; text before any tool call streams live.
+ * Ruling 25: live text goes through a currency sentinel; text after a currency marker or after any
+ * tool call is held and guardrailed once at turn end (against successful get_profit results, or
+ * replaced by fixed copy when there are none) and emitted as one token.
  */
 export async function runChat(
   deps: ChatDeps,
@@ -92,11 +117,14 @@ export async function runChat(
     avatar = s;
     emit({ type: "state", avatar: s });
   };
+  let text = "";
   const emitText = (t: string) => {
     if (!t) return;
     setState("talking");
+    text += t;
     emit({ type: "token", text: t });
   };
+  const sentinel = new StreamSentinel(emitText);
 
   setState("thinking");
   // One query: min_score 0 so the best score is known for knowledge_gaps; relevance is filtered here.
@@ -107,16 +135,17 @@ export async function runChat(
 
   const tools = deps.tools ?? toolsFor(assistant.app);
   const system = buildSystemPrompt(assistant, relevant, relevant.length > 0);
-  const messages: LlmMessage[] = [...input.history, { role: "user", content: input.message }];
+  const messages: LlmMessage[] = normalizeHistory([
+    ...(input.history as { role: "user" | "assistant"; content: string }[]),
+    { role: "user", content: input.message },
+  ]);
   const toolCalls: ToolCallRecord[] = [];
   const profitResults: LabeledReport[] = [];
-  let text = "";
   let guardrailReplaced = false;
+  let noDataReplaced = false;
 
   try {
     for (let round = 0; round < MAX_ROUNDS; round++) {
-      const afterTool = toolCalls.length > 0;
-      let buffered = "";
       const calls: LlmToolCall[] = [];
       for await (const chunk of deps.llm.stream({
         model: assistant.llm_model,
@@ -126,25 +155,16 @@ export async function runChat(
         signal,
       })) {
         if (signal.aborted) return null;
-        if (chunk.type === "text") {
-          if (afterTool) buffered += chunk.text;
-          else {
-            text += chunk.text;
-            emitText(chunk.text);
-          }
-        } else if (chunk.type === "tool_call") {
+        if (chunk.type === "text") sentinel.push(chunk.text);
+        else if (chunk.type === "tool_call") {
           calls.push(chunk.call);
         }
       }
       if (signal.aborted) return null;
 
-      if (afterTool && buffered) {
-        const g = applyProfitGuardrail(buffered, profitResults);
-        guardrailReplaced ||= g.replaced;
-        text += g.text;
-        emitText(g.text);
-      }
+      sentinel.flush();
       if (calls.length === 0) break;
+      sentinel.startBuffering(); // every later word may quote a tool result
 
       messages.push({ role: "assistant", tool_calls: calls });
       for (const call of calls) {
@@ -165,12 +185,28 @@ export async function runChat(
     throw err;
   }
 
+  const held = sentinel.held;
+  if (held) {
+    if (profitResults.length > 0) {
+      const g = applyProfitGuardrail(held, profitResults);
+      guardrailReplaced = g.replaced;
+      emitText(g.text);
+    } else if (parseRupiahAmounts(held).length > 0) {
+      guardrailReplaced = noDataReplaced = true;
+      emitText(failureCopy(toolCalls));
+    } else {
+      emitText(held);
+    }
+  }
+  const empty = text.trim() === "";
+  if (empty) emitText(EMPTY);
+
   const notFound = text.includes(NOT_FOUND);
   const citations = toolCalls.length === 0 && !notFound ? citationsFrom(relevant) : [];
   for (const c of citations) emit({ type: "citation", ...c });
 
   const avatarFinal: AvatarState =
-    toolCalls.some((t) => !t.ok) || notFound
+    toolCalls.some((t) => !t.ok) || notFound || noDataReplaced || empty
       ? "sad"
       : citations.length > 0 || toolCalls.some((t) => t.ok)
         ? "happy"

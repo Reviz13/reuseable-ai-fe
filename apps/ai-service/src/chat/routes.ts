@@ -105,6 +105,8 @@ export function registerChatRoutes(app: FastifyInstance): void {
       res.on("close", () => {
         if (!res.writableFinished) ac.abort();
       });
+      // The client may have gone while auth/DB work ran, before the listener existed.
+      if (res.destroyed || req.raw.socket?.destroyed) ac.abort();
       const emit = (e: SseEvent) => {
         if (!res.writableEnded && !res.destroyed) res.write(encodeSse(e));
       };

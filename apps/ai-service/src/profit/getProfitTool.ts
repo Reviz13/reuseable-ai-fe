@@ -1,10 +1,8 @@
 import { GetProfitArgsSchema, type GetProfitArgs, type ProfitReport, type ToolResult } from "@ai/contracts";
+import { FORBIDDEN, UPSTREAM } from "../copy.js";
 import type { ToolCtx, ToolDef } from "../tools/types.js";
 import { resolvePeriod } from "./period.js";
 import { UpstreamError } from "./posAdapter.js";
-
-const FORBIDDEN_MSG = "Hanya owner yang dapat melihat profit.";
-const UPSTREAM_MSG = "Data profit sedang tidak bisa diambil, coba lagi sebentar.";
 
 type Data = { report: ProfitReport; label: string };
 
@@ -29,7 +27,7 @@ async function run(args: GetProfitArgs, ctx: ToolCtx): Promise<ToolResult<Data>>
 
   if (claims.role !== "owner") {
     await audit("forbidden", "FORBIDDEN");
-    return { ok: false, code: "FORBIDDEN", message: FORBIDDEN_MSG };
+    return { ok: false, code: "FORBIDDEN", message: FORBIDDEN };
   }
 
   const period = resolvePeriod(args, claims.tz, ctx.now);
@@ -51,7 +49,7 @@ async function run(args: GetProfitArgs, ctx: ToolCtx): Promise<ToolResult<Data>>
     }
     if (!(err instanceof UpstreamError)) throw err; // bugs propagate
     await audit("error", "UPSTREAM_ERROR");
-    return { ok: false, code: "UPSTREAM_ERROR", message: UPSTREAM_MSG };
+    return { ok: false, code: "UPSTREAM_ERROR", message: UPSTREAM };
   }
 }
 

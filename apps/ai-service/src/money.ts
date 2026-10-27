@@ -24,6 +24,17 @@ const SCALE: Record<string, number> = {
   rupiah: 1,
 };
 
+const CURRENCY_PREFIXES = ["rp", "idr"];
+
+/**
+ * Any currency word the amount parser understands (prefixes plus SCALE suffixes), as a whole word.
+ * Used by the chat stream sentinel to stop live streaming before an amount can be emitted.
+ */
+export const CURRENCY_MARKER_RE = new RegExp(
+  `(?<![a-z])(?:${[...CURRENCY_PREFIXES, ...Object.keys(SCALE)].sort((a, b) => b.length - a.length).join("|")})(?![a-z])`,
+  "i",
+);
+
 // [sign: "-" | "rugi [filler words]"] [Rp|IDR [-]] number [suffix]
 const AMOUNT_RE =
   /(?<neg>-\s*|\brugi(?:\s+[a-z]+){0,2}?\s+)?(?:(?<![a-z])(?<cur>rp|idr)\.?\s*(?<neg2>-\s*)?)?(?<num>\d+(?:[.,]\d+)*)(?:\s*(?<suf>miliar|jutaan|juta|jt|ribu|rb|rupiah)(?![a-z]))?/gi;

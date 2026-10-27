@@ -294,6 +294,70 @@ describe("POST /v1/chat", () => {
   });
 });
 
+describe("POST /v1/chat failure paths after setup", () => {
+  it("unexpected error after hijack -> error INTERNAL, state sad, response ended, no assistant message", async () => {
+    const llm: LlmAdapter = {
+      async *stream() {
+        yield { type: "text", text: "Sebentar " };
+        throw new Error("boom");
+      },
+    };
+    const app = await makeApp(llm);
+    const res = await chat(app, { message: "hi" }, await token("internal-user"));
+    expect(res.statusCode).toBe(200);
+    const events = parseSse(res.body);
+    expect(events.slice(-2)).toMatchObject([
+      { type: "error", code: "INTERNAL" },
+      { type: "state", avatar: "sad" },
+    ]);
+    expect(events.some((e) => e.type === "done")).toBe(false);
+    const rows = await q<{ role: string }>(
+      "select m.role from messages m join conversations c on c.id = m.conversation_id where c.user_id = 'internal-user'",
+    );
+    expect(rows.map((r) => r.role)).toEqual(["user"]);
+  });
+
+  it("client disconnect before hijack still aborts: LLM never streams, no assistant message", async () => {
+    let releaseAuth!: () => void;
+    const authGate = new Promise<void>((r) => (releaseAuth = r));
+    let sawRequest!: () => void;
+    const requestArrived = new Promise<void>((r) => (sawRequest = r));
+    const llm = always([{ type: "text", text: "tidak boleh" }, { type: "end", stop: "end_turn" }]);
+    const verify = createEndUserVerifier({ pos: "http://x/jwks" }, { jwksFor: () => jwks });
+    const app = await makeApp(llm, {
+      verifyEndUser: async (t, a) => {
+        sawRequest();
+        await authGate; // hold the request before hijack until the client is gone
+        return verify(t, a);
+      },
+    });
+    await app.listen({ port: 0, host: "127.0.0.1" });
+    const port = (app.server.address() as { port: number }).port;
+    const tok = await token("early-close");
+    const body = JSON.stringify({ app: "pos", message: "halo" });
+    const req = http.request({
+      host: "127.0.0.1",
+      port,
+      path: "/v1/chat",
+      method: "POST",
+      headers: { "content-type": "application/json", authorization: `Bearer ${tok}`, "content-length": Buffer.byteLength(body) },
+    });
+    req.on("error", () => undefined);
+    req.end(body);
+    await requestArrived;
+    req.destroy();
+    await new Promise((r) => setTimeout(r, 100));
+    releaseAuth();
+    await new Promise((r) => setTimeout(r, 300));
+
+    expect(llm.calls.every((c) => c.signal.aborted)).toBe(true);
+    const rows = await q<{ role: string }>(
+      "select m.role from messages m join conversations c on c.id = m.conversation_id where c.user_id = 'early-close'",
+    );
+    expect(rows.map((r) => r.role)).not.toContain("assistant");
+  });
+});
+
 describe("GET /v1/assistants/:app/public", () => {
   it("returns a PublicAssistant with storage URLs (keeping ?v=) and default frames", async () => {
     await q(`update assistants set avatar_frames = '{"idle":"pos/idle.webp?v=3"}'::jsonb where app = 'pos'`);
