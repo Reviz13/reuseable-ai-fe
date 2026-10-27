@@ -6,6 +6,7 @@ import {
   collectCandidateAmounts,
   isProfitContext,
   sentinelTrips,
+  normalizeForCheck,
   normalizeForGuardrail,
   parseGuardrailAmounts,
 } from "../src/money.js";
@@ -126,7 +127,9 @@ describe("Ruling 29 normalization", () => {
     for (const s of ["maksimal 1.000 item", "12,500", "Ｒｐ", "R​p9", "９.９９９", "**Rp**"]) {
       expect(sentinelTrips(s)).toBe(true);
     }
-    for (const s of ["312 transaksi", "naik 12%", "2026-10-20", "jam 10.30", "terpakai"]) expect(sentinelTrips(s)).toBe(false);
+    // M6: a 4-digit run ("2026-10-20") now stops live streaming too; the guardrail exempts years.
+    expect(sentinelTrips("2026-10-20")).toBe(true);
+    for (const s of ["312 transaksi", "naik 12%", "jam 10.30", "terpakai"]) expect(sentinelTrips(s)).toBe(false);
   });
 });
 
@@ -162,4 +165,97 @@ describe("collectCandidateAmounts", () => {
     expect(applyProfitGuardrail("Profit 2.550.001", rep).replaced).toBe(true);
     expect(applyProfitGuardrail("dari 1.250 transaksi", [{ report: { ...base, transactions: 1250 }, label: "x" }]).replaced).toBe(true);
   });
+});
+
+describe("final fix wave: render-time transforms (M1)", () => {
+  const bs = "\\";
+  it.each([
+    [`9${bs}.999${bs}.000`, "9.999.000"],
+    ["9&#46;999&#46;000", "9.999.000"],
+    ["Rp&#57;.999.000", "Rp9.999.000"],
+    ["Rp&#x39;.999.000", "Rp9.999.000"],
+    ["9&period;999&comma;000&amp;&nbsp;&dollar;", "9.999,000& $"],
+    ["9<span></span>.999.000", "9.999.000"],
+    ["R<b>p</b>9.999.000", "Rp9.999.000"],
+  ])("checking copy of %j is %j", (a, b) => expect(normalizeForCheck(a)).toBe(b));
+
+  it.each([
+    `Profit minggu ini 9${bs}.999${bs}.000 ya.`,
+    "Profit minggu ini 9&#46;999&#46;000",
+    "Profit Rp&#57;.999.000.",
+    "Profit 9<span></span>.999.000.",
+  ])("applyProfitGuardrail replaces %j", (s) => {
+    const g = applyProfitGuardrail(s, rep);
+    expect(g.replaced).toBe(true);
+    expect(g.text).not.toMatch(/9\.999\.000/);
+  });
+
+  it("an unknown named entity trips the sentinel and fails closed in profit context", () => {
+    expect(sentinelTrips("Profit 9&foo;")).toBe(true);
+    expect(sentinelTrips("Langkah &hellip; selesai")).toBe(true);
+    expect(parseGuardrailAmounts("Profit &hellip; selesai", { profitContext: true }).some((a) => Number.isNaN(a.value))).toBe(true);
+    expect(parseGuardrailAmounts("Langkah &hellip; selesai", { profitContext: false })).toEqual([]);
+  });
+});
+
+describe("final fix wave: number tokens after punctuation (M4, Ruling 33)", () => {
+  it.each(["Profit minggu ini,9.999.000.", "Profit...9.999.000", "Profit.9.999.000"])("%j is replaced", (s) => {
+    expect(collectCandidateAmounts(s, { profitContext: true }).map((a) => a.value)).toEqual([9999000]);
+    expect(applyProfitGuardrail(s, rep).replaced).toBe(true);
+  });
+});
+
+describe("final fix wave: profit vocabulary (M5, Rulings 34/49)", () => {
+  it.each([
+    "Untungnya berapa minggu ini?",
+    "Berapa keuntungannya?",
+    "Labanya gimana?",
+    "kerugian",
+    "cuan minggu ini",
+    "profitnya",
+    "penjualannya",
+    "omzetnya",
+    "pemasukan hari ini",
+    "jualan kemarin",
+    "Sales this week",
+    "REVENUE",
+    "income?",
+  ])("%j is profit-context", (m) => expect(isProfitContext(m, false)).toBe(true));
+  it.each(["Bagaimana cara refund?", "profitable", "salesman"])("%j is not", (m) => expect(isProfitContext(m, false)).toBe(false));
+  it("'Untungnya 9.999.000.' is replaced", () => expect(applyProfitGuardrail("Untungnya 9.999.000.", rep).replaced).toBe(true));
+});
+
+describe("final fix wave: ungrouped and space-grouped figures (M6, Ruling 35)", () => {
+  const pc = { profitContext: true };
+  it.each(["9999000", "9 999 000", "9 999 000", "9 999 000", "9'999'000", "Rp: 2026"])("sentinel trips on %j", (s) =>
+    expect(sentinelTrips(s)).toBe(true),
+  );
+  it.each([
+    ["Profit minggu ini 9999000 ya.", 9999000],
+    ["Profit minggu ini 9 999 000 ya.", 9999000],
+    ["Profit minggu ini 9'999'000 ya.", 9999000],
+    ["Profit 12500", 12500],
+  ])("%j is a candidate", (s, v) => expect(collectCandidateAmounts(s, pc).map((a) => a.value)).toContain(v));
+  it("years 1900-2100 are exempt unless next to a currency marker", () => {
+    expect(collectCandidateAmounts("Profit 2026 ini", pc)).toEqual([]);
+    expect(collectCandidateAmounts("Profit 1899 ini", pc).map((a) => a.value)).toEqual([1899]);
+    expect(collectCandidateAmounts("Profit Rp: 2026", pc).map((a) => a.value)).toEqual([2026]);
+    expect(collectCandidateAmounts("Profit 2026 , rupiah", pc).map((a) => a.value)).toEqual([2026]);
+  });
+  it("'Profit 2026 ini Rp2.550.000' passes with a successful report", () =>
+    expect(applyProfitGuardrail("Profit 2026 ini Rp2.550.000", rep).replaced).toBe(false));
+  it("ISO dates in a correct profit answer are not replaced", () =>
+    expect(applyProfitGuardrail("Profit minggu ini (2026-10-20 s.d. 2026-10-26): Rp2.550.000.", rep).replaced).toBe(false));
+  it("a space-grouped correct figure passes", () => expect(applyProfitGuardrail("Profit 2 550 000", rep).replaced).toBe(false));
+  it("no candidates outside profit context", () => expect(collectCandidateAmounts("9999000", { profitContext: false })).toEqual([]));
+});
+
+describe("final fix wave: kerugian negation (S5)", () => {
+  const loss = (profit: number) => [{ report: { ...base, profit }, label: "x" }];
+  it("'kerugian Rp250.000' with profit +250000 is replaced", () =>
+    expect(applyProfitGuardrail("kerugian Rp250.000", loss(250000)).replaced).toBe(true));
+  it("'kerugian Rp250.000' with profit -250000 passes", () =>
+    expect(applyProfitGuardrail("kerugian Rp250.000", loss(-250000)).replaced).toBe(false));
+  it("'ruginya minggu ini Rp250.000' with profit -250000 passes", () =>
+    expect(applyProfitGuardrail("ruginya minggu ini Rp250.000", loss(-250000)).replaced).toBe(false));
 });

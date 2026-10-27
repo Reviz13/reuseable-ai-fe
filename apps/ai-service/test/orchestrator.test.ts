@@ -7,6 +7,7 @@ import { EMPTY, FORBIDDEN, NO_DATA, NOT_FOUND, UPSTREAM } from "../src/copy.js";
 import { withFallback } from "../src/llm/gateway.js";
 import { createPosAdapter, UpstreamError } from "../src/profit/posAdapter.js";
 import { normalizeHistory } from "../src/chat/orchestrator.js";
+import { normalizeForCheck } from "../src/money.js";
 import { createFakeAdapter } from "../src/llm/fake.js";
 import type { LlmAdapter, LlmChunk } from "../src/llm/types.js";
 import type { PosAdapter } from "../src/profit/posAdapter.js";
@@ -855,5 +856,93 @@ describe("runChat: Ruling 31 profit-context from follow-ups and answer text", ()
     const { r } = await run("Cara refund?", history, ["Refund ", "maksimal ", "1.000 ", "item."], [chunk("a", "d1", 0.9)]);
     expect(r.guardrailReplaced).toBe(false);
     expect(r.text).toBe("Refund maksimal 1.000 item.");
+  });
+});
+
+describe("runChat: final fix wave probes (M1, M4, M5, M6)", () => {
+  const fresh = () => new AbortController().signal;
+  const PROFIT_Q = "Profit minggu ini berapa?";
+  // Checked on the checking copy too, so entity/escape/tag forms that render as 9.999.000 count.
+  const never = (events: SseEvent[]) => {
+    for (const t of tokens(events)) {
+      expect(t.normalize("NFKC")).not.toMatch(/9\D{0,3}999\D{0,3}000|9999000/);
+      expect(normalizeForCheck(t)).not.toMatch(/9\D{0,3}999\D{0,3}000|9999000/);
+    }
+  };
+  const split3 = (s: string) => s.match(/[\s\S]{1,3}/gu)!;
+  const bs = "\\";
+
+  const LEAKS: [string, string][] = [
+    ["M1 markdown escapes", `Profit minggu ini 9${bs}.999${bs}.000 ya.`],
+    ["M1 numeric entity dots", "Profit minggu ini 9&#46;999&#46;000"],
+    ["M1 numeric entity digit", "Profit Rp&#57;.999.000."],
+    ["M1 hex entity digit", "Profit Rp&#x39;.999.000."],
+    ["M1 named entity dots", "Profit 9&period;999&period;000."],
+    ["M1 empty span", "Profit 9<span></span>.999.000."],
+    ["M4 comma-glued", "Profit minggu ini,9.999.000."],
+    ["M4 ellipsis-glued", "Profit...9.999.000"],
+    ["M4 dot-glued", "Profit.9.999.000"],
+    ["M6 ungrouped", "Profit minggu ini 9999000 ya."],
+    ["M6 space-grouped", "Profit minggu ini 9 999 000 ya."],
+    ["M6 NBSP-grouped", "Profit minggu ini 9 999 000 ya."],
+    ["M6 apostrophe-grouped", "Profit minggu ini 9'999'000 ya."],
+    ["combining mark", "Profit 9́.999.000."],
+  ];
+
+  describe.each([
+    ["whole", (s: string) => [s]],
+    ["split into 3-char chunks", split3],
+  ])("%s", (_mode, chunker) => {
+    it.each(LEAKS)("(A) no tool, profit question: %s -> NO_DATA", async (_n, body) => {
+      const llm = createFakeAdapter([[...chunker(body).map(text), end()]]);
+      const s = setup({ llm });
+      const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+      never(s.events);
+      expect(r!.guardrailReplaced).toBe(true);
+      expect(r!.text.endsWith(NO_DATA)).toBe(true);
+    });
+
+    it.each(LEAKS)("(B) successful tool (2.550.000): %s -> template", async (_n, body) => {
+      const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [...chunker(body).map(text), end()]]);
+      const s = setup({ llm });
+      const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+      never(s.events);
+      expect(r!.guardrailReplaced).toBe(true);
+      expect(r!.text).toContain("Rp2.550.000. Penjualan Rp4.250.000, HPP Rp1.700.000, 312 transaksi.");
+    });
+  });
+
+  it.each([
+    ["Untungnya berapa minggu ini?", "Untungnya 9.999.000."],
+    ["Berapa keuntungannya?", "Keuntungannya 9.999.000."],
+    ["Labanya gimana?", "Labanya 9.999.000."],
+    ["kerugian minggu ini?", "Minggu ini 9.999.000."],
+    ["cuan minggu ini", "Minggu ini 9.999.000."],
+    ["sales this week?", "This week 9.999.000."],
+  ])("M5: %j is profit-context, %j -> NO_DATA", async (message, answer) => {
+    const llm = createFakeAdapter([[text(answer), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("owner", message), s.emit, fresh());
+    never(s.events);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text.endsWith(NO_DATA)).toBe(true);
+  });
+
+  it("M6: a year next to a correct figure is not replaced", async () => {
+    const body = "Profit 2026 ini Rp2.550.000";
+    const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [text(body), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("owner", PROFIT_Q), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.text.startsWith(body)).toBe(true);
+  });
+
+  it("M6: a 4-digit number stops live streaming but a non-profit turn releases it unchanged", async () => {
+    const parts = ["Buka ", "menu ", "tahun ", "2026 ", "lalu ", "simpan."];
+    const llm = createFakeAdapter([[...parts.map(text), end()]]);
+    const s = setup({ llm, chunks: [chunk("a", "d1", 0.9)] });
+    const r = await runChat(s.deps, input("owner", "Bagaimana cara refund?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.text).toBe(parts.join(""));
   });
 });
