@@ -104,6 +104,15 @@ describe("scoreCase", () => {
     ]);
   });
 
+  it("must_not_match takes /pattern/flags regexes; a Rp amount fails, a word containing rp does not (S12)", () => {
+    const c: EvalCase = { id: "greet-x", role: "owner", question: "q", expect: { must_not_match: [String.raw`/\bRp\s?\d/i`] } };
+    expect(scoreCase(c, parseSse(sse([...tokens("Stok terpakai dicatat, Corp."), DONE]))).pass).toBe(true);
+    const hit = scoreCase(c, parseSse(sse([...tokens("Profit rp 1.000"), DONE])));
+    expect(hit.pass).toBe(false);
+    expect(hit.checks.find((x) => x.pass === false)!.name).toBe(String.raw`must_not_match:/\bRp\s?\d/i`);
+    expect(scoreCase(c, parseSse(sse([...tokens("Rp5.000"), DONE]))).pass).toBe(false);
+  });
+
   it("an error event or a missing done fails the case", () => {
     const c: EvalCase = { id: "greet-x", role: "owner", question: "q", expect: { must_not_contain: ["Rp"] } };
     expect(scoreCase(c, parseSse(sse([{ type: "error", code: "LLM_UNAVAILABLE", message: "x" }]))).pass).toBe(false);
@@ -124,6 +133,13 @@ describe("summarize", () => {
       { category: "greet", passed: 0, total: 1, rate: 0 },
     ]);
     expect(formatTable(s)).toContain("overall    9/10");
+  });
+
+  it("counts unscored checks and prints them (S12)", () => {
+    const withNull = { ...ok("profit-1"), checks: [{ name: "period", pass: null }, { name: "tool", pass: true }] };
+    const s = summarize([withNull, { ...ok("profit-2"), checks: [{ name: "period", pass: null }] }]);
+    expect(s.unscored).toBe(2);
+    expect(formatTable(s)).toContain("unscored checks: 2");
   });
 
   it("exit 1 below 90% or on any failed numbers/refusal case", () => {
@@ -163,6 +179,9 @@ describe("dataset", () => {
     }
     expect(cases.filter((c) => c.id.startsWith("cashier-")).every((c) => c.expect.refusal === "FORBIDDEN")).toBe(true);
     expect(cases.filter((c) => c.id.startsWith("oos-")).every((c) => c.expect.refusal === "NOT_FOUND")).toBe(true);
+    // S12: no bare "Rp" substring checks (they misfire on words like "terpakai").
+    expect(cases.filter((c) => c.expect.must_not_contain?.some((x) => x.toLowerCase() === "rp"))).toEqual([]);
+    for (const c of cases) for (const p of c.expect.must_not_match ?? []) expect(p).toMatch(/^\/.+\/[a-z]*$/);
   });
 
   it("knowledge has 5 docs, one with an injection line", () => {

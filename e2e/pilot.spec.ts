@@ -76,7 +76,7 @@ test.describe("POS pilot demo (/demo/pos)", () => {
     const answer = await waitForAnswerDone(page);
     await sad;
     await expect(answer).toContainText(FORBIDDEN);
-    await expect(answer).not.toContainText(/Rps?d/);
+    await expect(answer).not.toContainText(/Rp\s?\d/);
     await expect(avatarActive(page, "sad")).toHaveCount(1);
     await expect(userMessages(page)).toHaveCount(1);
   });

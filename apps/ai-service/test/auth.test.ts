@@ -149,3 +149,36 @@ describe("loadConfig", () => {
     expect(() => loadConfig({})).toThrow(/DATABASE_URL/);
   });
 });
+
+describe("logger redaction (S4)", () => {
+  it("never writes the bearer token or internal key; logged headers show [Redacted]", async () => {
+    const lines: string[] = [];
+    const app = createApp(
+      {
+        config,
+        db: { query: async () => [] },
+        blob: createMemoryBlobStore(),
+        verifyEndUser: verify,
+        verifyAdmin: async () => {
+          throw new AuthError("bad");
+        },
+        now: () => new Date(),
+      } as never,
+      { logger: true, logStream: { write: (l: string) => void lines.push(l) } },
+    );
+    app.get("/probe-headers", async (req) => {
+      req.log.info({ headers: req.headers }, "headers probe");
+      return { ok: true };
+    });
+    await app.ready();
+    const TOKEN = "eyJhbGciOiJSUzI1NiJ9.secret-token-value.sig";
+    await app.inject({ url: "/probe-headers", headers: { authorization: `Bearer ${TOKEN}`, "x-internal-key": "INTERNAL-SECRET" } });
+    await app.inject({ url: "/admin/pos/documents", headers: { authorization: `Bearer ${TOKEN}` } });
+    await app.close();
+    const log = lines.join("");
+    expect(log).toContain("headers probe");
+    expect(log).toContain("[Redacted]");
+    expect(log).not.toContain("secret-token-value");
+    expect(log).not.toContain("INTERNAL-SECRET");
+  });
+});

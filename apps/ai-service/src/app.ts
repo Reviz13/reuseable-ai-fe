@@ -58,10 +58,21 @@ function bearer(req: FastifyRequest): string {
   return m[1]!;
 }
 
-export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): FastifyInstance {
+// S4: secrets in headers never reach the log, whether logged under req or as a bare headers object.
+const REDACT = [
+  "req.headers.authorization",
+  "req.headers['x-internal-key']",
+  "headers.authorization",
+  "headers['x-internal-key']",
+];
+
+export function createApp(
+  deps: AppDeps,
+  opts: { logger?: boolean; /** Test hook: capture log lines. */ logStream?: { write(line: string): void } } = {},
+): FastifyInstance {
   const app = Fastify({
     logger: opts.logger
-      ? { redact: ["req.headers.authorization", "req.headers['x-internal-key']"] }
+      ? { redact: REDACT, ...(opts.logStream ? { stream: opts.logStream } : {}) }
       : false,
   });
   const corsLookup = createCorsOriginLookup(deps.db, () => deps.now().getTime());

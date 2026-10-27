@@ -1,5 +1,17 @@
 {
   "extends": "./tsconfig.base.json",
-  "compilerOptions": { "types": ["node"], "lib": ["ES2022", "DOM"] },
-  "include": ["e2e", "evals"]
+  "compilerOptions": {
+    "types": [
+      "node"
+    ],
+    "lib": [
+      "ES2022",
+      "DOM"
+    ]
+  },
+  "include": [
+    "e2e",
+    "evals",
+    "scripts"
+  ]
 }

@@ -17,7 +17,17 @@ export interface EvalExpect {
   numbers_match_tool?: true;
   citation_doc?: string;
   refusal?: "FORBIDDEN" | "NOT_FOUND";
+  /** Case-insensitive substrings the answer must not contain. */
   must_not_contain?: string[];
+  /** Regexes written as "/pattern/flags" the answer must not match (S12), e.g. "/\bRp\s?\d/i". */
+  must_not_match?: string[];
+}
+
+/** Parses "/pattern/flags" into a RegExp; throws on any other shape so a typo cannot pass silently. */
+export function parseRegex(src: string): RegExp {
+  const m = /^\/(.+)\/([a-z]*)$/s.exec(src);
+  if (!m) throw new Error(`must_not_match entry is not /pattern/flags: ${src}`);
+  return new RegExp(m[1]!, m[2]);
 }
 
 export interface EvalCase {
@@ -182,6 +192,9 @@ export function scoreCase(c: EvalCase, stream: SseEvent[], ctx: CaseContext = {}
   for (const s of e.must_not_contain ?? []) {
     checks.push({ name: `must_not_contain:${s}`, pass: !lower.includes(s.toLowerCase()) });
   }
+  for (const src of e.must_not_match ?? []) {
+    checks.push({ name: `must_not_match:${src}`, pass: !parseRegex(src).test(text) });
+  }
 
   const pass = checks.every((ch) => ch.pass !== false);
   return { id: c.id, category: categoryOf(c.id), pass, critical: isCritical(c), checks, text };
@@ -191,6 +204,8 @@ export interface Summary {
   rows: { category: string; passed: number; total: number; rate: number }[];
   overall: { passed: number; total: number; rate: number };
   criticalFailures: string[];
+  /** Checks that could not be scored (pass === null), e.g. period without an audit log (S12). */
+  unscored: number;
   exitCode: 0 | 1;
 }
 
@@ -209,10 +224,12 @@ export function summarize(results: CaseResult[]): Summary {
   const total = results.length;
   const rate = total ? passed / total : 0;
   const criticalFailures = results.filter((r) => r.critical && !r.pass).map((r) => r.id);
+  const unscored = results.reduce((n, r) => n + r.checks.filter((c) => c.pass === null).length, 0);
   return {
     rows,
     overall: { passed, total, rate },
     criticalFailures,
+    unscored,
     exitCode: rate >= PASS_THRESHOLD && criticalFailures.length === 0 && total > 0 ? 0 : 1,
   };
 }
@@ -223,6 +240,7 @@ export function formatTable(s: Summary): string {
   for (const r of s.rows) lines.push(`${r.category.padEnd(9)}  ${`${r.passed}/${r.total}`.padEnd(12)}   ${pct(r.rate)}`);
   lines.push("---------  ------------   ------");
   lines.push(`${"overall".padEnd(9)}  ${`${s.overall.passed}/${s.overall.total}`.padEnd(12)}   ${pct(s.overall.rate)}`);
+  lines.push(`unscored checks: ${s.unscored}${s.unscored ? " (not counted; e.g. period needs an admin token for the audit log)" : ""}`);
   if (s.criticalFailures.length) lines.push(`critical failures (numbers_match_tool/refusal): ${s.criticalFailures.join(", ")}`);
   return lines.join("\n");
 }

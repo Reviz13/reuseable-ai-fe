@@ -1,9 +1,10 @@
 // Creates the dev admin (SEED_ADMIN_EMAIL / SEED_ADMIN_PASSWORD) and grants it app "pos".
 // Run once after the hosted Supabase project exists: `pnpm seed:admin`. Reads the root .env.
-// Auth user goes through the Admin API (service role key). The `admins` row is written with a
-// direct pg query on DATABASE_URL: the table has RLS with no policies, and the owner connection bypasses it.
+// Both the auth user (Admin API) and the `admins` row go through supabase-js with the service role
+// key, which bypasses RLS (the table has RLS with no policies). No DATABASE_URL, no direct pg (S10).
 import { createClient } from "@supabase/supabase-js";
-import pg from "pg";
+
+const APP = "pos";
 
 function need(name: string): string {
   const v = process.env[name];
@@ -13,7 +14,6 @@ function need(name: string): string {
 
 const url = need("SUPABASE_URL");
 const serviceKey = need("SUPABASE_SERVICE_ROLE_KEY");
-const databaseUrl = need("DATABASE_URL");
 const email = need("SEED_ADMIN_EMAIL");
 const password = need("SEED_ADMIN_PASSWORD");
 
@@ -39,17 +39,12 @@ async function main() {
     if (!userId) throw created.error ?? new Error("could not create or find admin user");
   }
 
-  const client = new pg.Client({ connectionString: databaseUrl, ssl: { rejectUnauthorized: false } });
-  await client.connect();
-  try {
-    await client.query(
-      `insert into admins (user_id, apps) values ($1, '{pos}')
-       on conflict (user_id) do update set apps = (select array(select distinct unnest(admins.apps || '{pos}')))`,
-      [userId],
-    );
-  } finally {
-    await client.end();
-  }
+  // Keep any apps the account already has; add "pos".
+  const existing = await sb.from("admins").select("apps").eq("user_id", userId).maybeSingle();
+  if (existing.error) throw existing.error;
+  const apps = [...new Set([...((existing.data?.apps as string[] | undefined) ?? []), APP])];
+  const up = await sb.from("admins").upsert({ user_id: userId, apps }, { onConflict: "user_id" });
+  if (up.error) throw up.error;
   console.log(`admin ready: ${email}`);
 }
 

@@ -22,6 +22,16 @@ describe("resolvePeriod", () => {
     expect(resolvePeriod({ period: "today" }, jkt, t)).toMatchObject({ from: "2026-10-26", to: "2026-10-26" });
   });
 
+  it("last_month across a year boundary (S3)", () => {
+    const jan = new Date("2026-01-15T05:00:00Z");
+    expect(resolvePeriod({ period: "last_month" }, jkt, jan)).toMatchObject({ from: "2025-12-01", to: "2025-12-31" });
+  });
+
+  it("uses local date for WITA (Asia/Makassar) after its midnight (S3)", () => {
+    const t = new Date("2026-10-26T16:30:00Z"); // 00:30 WITA on 2026-10-27
+    expect(resolvePeriod({ period: "today" }, "Asia/Makassar", t)).toMatchObject({ from: "2026-10-27", to: "2026-10-27" });
+  });
+
   it("week starts Monday when today is Monday", () => {
     const mon = new Date("2026-10-26T05:00:00Z");
     expect(resolvePeriod({ period: "this_week" }, jkt, mon)).toMatchObject({ from: "2026-10-26", to: "2026-10-26" });
