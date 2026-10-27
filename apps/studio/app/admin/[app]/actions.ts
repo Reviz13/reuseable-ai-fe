@@ -12,5 +12,5 @@ export async function logout(): Promise<void> {
 /** Ends the session without redirecting (the 403 screen stays visible). */
 export async function signOutOnly(): Promise<void> {
   const supabase = await createServerSupabase();
-  await supabase.auth.signOut();
+  await supabase.auth.signOut({ scope: "local" });
 }

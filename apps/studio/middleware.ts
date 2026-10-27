@@ -4,8 +4,8 @@ import type { CookieToSet } from "./lib/cookies";
 
 // Refreshes the Supabase session cookie on /admin/* and sends anonymous visitors to /login.
 export async function middleware(request: NextRequest) {
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
+  const url = process.env.SUPABASE_URL;
+  const anonKey = process.env.SUPABASE_ANON_KEY;
   if (!url || !anonKey) return NextResponse.redirect(new URL("/login", request.url));
 
   let response = NextResponse.next({ request });

@@ -167,10 +167,13 @@ describe("knowledge admin api", () => {
     await send("PUT", `/admin/pos/faqs/${id}`, { question: "Bisa bayar QRIS?", answer: "Ya, semua QRIS." });
     const get2 = await get(`/admin/pos/documents/${id}`);
     expect((get2.json() as { faq: unknown }).faq).toEqual({ question: "Bisa bayar QRIS?", answer: "Ya, semua QRIS." });
-    const [file] = (await get("/admin/pos/documents")).json() as { id: string; kind: string }[];
-    if (file && file.kind === "file") {
-      expect((await get(`/admin/pos/documents/${file.id}`).then((r) => r.json())) as object).not.toHaveProperty("faq");
-    }
+    // A file document never carries `faq`: create one here so this does not depend on test order.
+    const up = await upload("faq-absent.md", Buffer.from("# Judul\n\nIsi dokumen singkat."), MD);
+    const { document_id } = up.json() as { document_id: string };
+    await waitDone(document_id);
+    const fileDoc = (await get(`/admin/pos/documents/${document_id}`)).json() as { kind: string };
+    expect(fileDoc.kind).toBe("file");
+    expect(fileDoc).not.toHaveProperty("faq");
   });
 
   it("delete clears active version, keeps versions, removes from retrieval", async () => {
