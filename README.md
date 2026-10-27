@@ -128,5 +128,6 @@ Attributes `app`, `api`, `position`, `open`, `lang`; methods `open()`, `close()`
 - Knowledge answers that quote prices (`harga Rp25.000`) stop streaming at the price and are replaced with the NO_DATA copy (Ruling 25).
 - In profit questions, unrelated grouped or 4+-digit numbers (`1.250 transaksi`, phone numbers) that are not a report figure force the template answer. Years 1900 to 2100 are exempt.
 - The hosted dev project is in Sydney (ap-southeast-2), not Singapore as in spec §6 (Ruling 47).
+- In profit answers, a figure that appears only in a link URL (`[laporan](https://x/9.999.000)`) or inside a character reference (`&#8211;`) forces the template or NO_DATA copy, because the guardrail checks every interpretation of the text (Ruling 53).
 - Accepted residual forms (Ruling 52): a figure split by `\`, `-` or `. ` (e.g. `9\999\000`, `9-999-000`, `9. 999. 000`) is not reassembled by the guardrail. The startup sweeper is not coordinated across instances: with several ai-service instances, one restarting can mark another's in-flight ingestion (older than 10 minutes, no chunks yet) as `interrupted`.
 - `knowledge_gaps.question` keeps end-user text beyond the 90-day conversation purge (spec §10).

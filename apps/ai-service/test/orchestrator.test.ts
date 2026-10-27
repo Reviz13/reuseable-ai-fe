@@ -953,6 +953,8 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
   const never = (events: SseEvent[]) => {
     for (const t of tokens(events)) {
       expect(t).not.toContain("9.999.000");
+      expect(t).not.toContain("1000000");
+      expect(t).not.toContain("999.999");
       expect(t.normalize("NFKC")).not.toMatch(/9\D{0,3}999\D{0,3}000|9999000/);
     }
   };
@@ -976,6 +978,17 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
     ["NI-1 fenced code block", "Profit\n\n```\n[a](9.999.000)\n```"],
     ["NI-2 link title", 'Profit [a](x "Rp9.999.000")'],
     ["figure only in a link url (accepted fail-closed cost)", "Profit [x](https://s/9.999.000)"],
+    // Ruling 53 extended: marked shows these entity forms literally ("&" escaped), so the digits are displayed.
+    ["entity no ; 7 digits", "Profit Rp&#1000000"],
+    ["entity no ; grouped", "Profit Rp&#999.999"],
+    ["entity no ; bare", "Profit minggu ini &#1000000 rupiah"],
+    ["entity in code span", "Profit `Rp&#1000000;`"],
+    ["entity in fenced code", "Profit\n\n```\nRp&#1000000;\n```"],
+    // Earlier decoded-entity forms must still be caught.
+    ["entity dots (M1)", "Profit 9&#46;999&#46;000"],
+    ["entity digit (M1)", "Profit Rp&#57;.999.000."],
+    ["entity lt/gt", "Profit &lt;9.999.000&gt;"],
+    ["hex entity dots", "Profit 9&#x2E;999&#x2E;000"],
   ];
   const modes: [string, (s: string) => string[]][] = [
     ["whole", (s) => [s]],
@@ -1008,7 +1021,7 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
         expect(r!.text).toBe(body);
       },
     );
-    it.each(["<b>Rp2.550.000</b>", "[Rp2.550.000](x)", "Profit Rp2.550.000", "| Profit | Rp2.550.000 |", "Profit 2,55 juta"])(
+    it.each(["<b>Rp2.550.000</b>", "[Rp2.550.000](x)", "Profit Rp2.550.000", "| Profit | Rp2.550.000 |", "Profit 2,55 juta", "**Rp2.550.000**", "Rp2.550.000&nbsp;ya"])(
       "correct answer %j is not replaced and is happy",
       async (body) => {
         const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [...chunker(body).map(text), end()]]);

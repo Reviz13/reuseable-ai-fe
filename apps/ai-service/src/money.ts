@@ -100,13 +100,14 @@ function decodeEntity(whole: string, body: string): string {
  * - NFKC (full-width digits/letters, NBSP), combining marks and zero-width characters removed,
  *   U+2212 as "-", look-alike Cyrillic/Greek letters mapped, markdown emphasis/code characters removed.
  *
- * N1/N2/Ruling 53: tag stripping and link flattening are interpretations, never the only copy.
- * `keepTags` skips the tag-strip step; `flattenLinks: false` skips the link step. checkingCopies()
- * runs every check on all four combinations, so text marked shows literally (a "link" that is not
- * one, a code span, a link title tooltip, angle-bracket text) is never deleted from every copy.
- * The defaults (tags stripped, links flattened) are one of the four.
+ * N1/N2/Ruling 53: tag stripping, link flattening and entity decoding are interpretations, never the
+ * only copy. `keepTags` skips the tag-strip step, `flattenLinks: false` the link step and
+ * `decodeEntities: false` the character-reference step. checkingCopies() runs every check on all
+ * eight combinations, so text marked shows literally (a "link" that is not one, a code span, a link
+ * title tooltip, angle-bracket text, an escaped "&#1000000") is never deleted from every copy.
+ * The defaults (tags stripped, links flattened, entities decoded) are one of the eight.
  */
-export type CheckOptions = { keepTags?: boolean; flattenLinks?: boolean };
+export type CheckOptions = { keepTags?: boolean; flattenLinks?: boolean; decodeEntities?: boolean };
 
 function flattenLinks(s: string): string {
   return s
@@ -116,11 +117,11 @@ function flattenLinks(s: string): string {
 }
 
 export function normalizeForCheck(text: string, opts: CheckOptions = {}): string {
-  const unescaped = (opts.keepTags ? text : text.replace(/<[^>]*>/g, ""))
-    .replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);?/gi, (whole, body: string) =>
+  const tagged = opts.keepTags ? text : text.replace(/<[^>]*>/g, "");
+  const decoded = opts.decodeEntities === false ? tagged : tagged.replace(/&(#x[0-9a-f]+|#\d+|[a-z][a-z0-9]*);?/gi, (whole, body: string) =>
       body[0] !== "#" && !whole.endsWith(";") ? whole : decodeEntity(whole, body),
-    )
-    .replace(/\\([!-/:-@[-`{-~])/g, "$1");
+    );
+  const unescaped = decoded.replace(/\\([!-/:-@[-`{-~])/g, "$1");
   return (opts.flattenLinks === false ? unescaped : flattenLinks(unescaped))
     .normalize("NFKC")
     .replace(/\p{M}/gu, "")
@@ -139,26 +140,38 @@ export function normalizeForGuardrail(text: string, opts: CheckOptions = {}): st
   return normalizeForCheck(text, opts).replace(GLUED_PREFIX_RE, "$1 ");
 }
 
-const COPY_OPTIONS: CheckOptions[] = [
-  { keepTags: true, flattenLinks: false }, // the original structure (all other normalisations applied)
-  { keepTags: false, flattenLinks: false },
-  { keepTags: true, flattenLinks: true },
-  { keepTags: false, flattenLinks: true },
-];
+// The first entry is the original structure (tags, links and entities as written; all other
+// normalisations applied).
+const COPY_OPTIONS: CheckOptions[] = [false, true].flatMap((decodeEntities) =>
+  [true, false].flatMap((keepTags) => [false, true].map((flattenLinks) => ({ keepTags, flattenLinks, decodeEntities }))),
+);
+
+type CheckingCopy = { text: string; decoded: boolean };
 
 /**
  * Ruling 53: every interpretation of the text, added to the union, never substituted. Checks take the
  * union: the sentinel trips if any copy trips; an amount or candidate in any copy must match a
  * report. Identical copies are deduplicated, so plain text is checked once.
  */
-function checkingCopies(text: string, guardrail = false): string[] {
+function checkingCopies(text: string, guardrail = false): CheckingCopy[] {
   const f = guardrail ? normalizeForGuardrail : normalizeForCheck;
-  return [...new Set(COPY_OPTIONS.map((o) => f(text, o)))];
+  const byText = new Map<string, boolean>();
+  for (const o of COPY_OPTIONS) {
+    const t = f(text, o);
+    byText.set(t, (byText.get(t) ?? false) || o.decodeEntities !== false);
+  }
+  return [...byText].map(([t, decoded]) => ({ text: t, decoded }));
 }
+
+/**
+ * An undecodable named entity fails closed (M1), checked on decoded copies only: in an undecoded copy
+ * every entity, including a harmless "&nbsp;", is still written out.
+ */
+const unknownEntity = (c: CheckingCopy) => c.decoded && UNKNOWN_ENTITY_RE.test(c.text);
 
 /** True when `re` matches any checking copy. */
 export function testEitherCopy(re: RegExp, text: string): boolean {
-  return checkingCopies(text).some((n) => re.test(n));
+  return checkingCopies(text).some((c) => re.test(c.text));
 }
 
 /** Ruling 29(b): a grouped number ("1.000", "9.999.000", "12,500"). */
@@ -178,7 +191,8 @@ const SPACED_TOKEN_RE = /(?<![\d.,'’])\d{1,3}(?:['’\s  ]\d{3})+(?!\d)/g;
  */
 export function sentinelTrips(text: string): boolean {
   return checkingCopies(text).some(
-    (n) => CURRENCY_MARKER_RE.test(n) || GROUPED_RE.test(n) || LONG_RUN_RE.test(n) || SPACED_RE.test(n) || UNKNOWN_ENTITY_RE.test(n),
+    (c) =>
+      CURRENCY_MARKER_RE.test(c.text) || GROUPED_RE.test(c.text) || LONG_RUN_RE.test(c.text) || SPACED_RE.test(c.text) || unknownEntity(c),
   );
 }
 
@@ -232,7 +246,8 @@ function isYear(normalized: string, token: string, start: number, end: number): 
   return !CURRENCY_BEFORE_RE.test(before) && !CURRENCY_AFTER_RE.test(after);
 }
 
-function candidatesIn(normalized: string, covered: Located[]): ParsedAmount[] {
+function candidatesIn(copy: CheckingCopy, covered: Located[]): ParsedAmount[] {
+  const normalized = copy.text;
   const out: ParsedAmount[] = [];
   const isCovered = (start: number, end: number) => covered.some((l) => l.start < end && start < l.end);
   const push = (base: number | null, start: number) => {
@@ -253,7 +268,7 @@ function candidatesIn(normalized: string, covered: Located[]): ParsedAmount[] {
     push(Number(m[0].replace(/\D/g, "")), start);
   }
   // M1 fail-closed: a character reference the checking copy could not decode may hide a figure.
-  if (UNKNOWN_ENTITY_RE.test(normalized)) out.push(FAILED);
+  if (unknownEntity(copy)) out.push(FAILED);
   return out;
 }
 
@@ -264,7 +279,7 @@ function candidatesIn(normalized: string, covered: Located[]): ParsedAmount[] {
  */
 export function collectCandidateAmounts(text: string, opts: CandidateOptions): ParsedAmount[] {
   if (!opts.profitContext) return [];
-  return checkingCopies(text, true).flatMap((n) => candidatesIn(n, scan(n)));
+  return checkingCopies(text, true).flatMap((c) => candidatesIn(c, scan(c.text)));
 }
 
 function parseNumber(raw: string): number | null {
@@ -322,10 +337,11 @@ export function parseRupiahAmountsDetailed(text: string): ParsedAmount[] {
  */
 export function parseGuardrailAmounts(text: string, opts: CandidateOptions = { profitContext: false }): ParsedAmount[] {
   // N1: both copies are parsed; an amount found in either must match a report.
-  return checkingCopies(text, true).flatMap((n) => amountsIn(n, opts));
+  return checkingCopies(text, true).flatMap((c) => amountsIn(c, opts));
 }
 
-function amountsIn(normalized: string, opts: CandidateOptions): ParsedAmount[] {
+function amountsIn(copy: CheckingCopy, opts: CandidateOptions): ParsedAmount[] {
+  const normalized = copy.text;
   const located = scan(normalized);
   const out = located.map((l) => l.amount);
   for (const m of normalized.matchAll(BACKSTOP_RE)) {
@@ -333,7 +349,7 @@ function amountsIn(normalized: string, opts: CandidateOptions): ParsedAmount[] {
     const end = start + m[0].length;
     if (!located.some((l) => l.start < end && start < l.end)) out.push(FAILED);
   }
-  if (opts.profitContext) out.push(...candidatesIn(normalized, located));
+  if (opts.profitContext) out.push(...candidatesIn(copy, located));
   return out;
 }
 
