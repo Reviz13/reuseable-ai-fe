@@ -11,6 +11,8 @@ import type { Config } from "./config.js";
 import { createCorsOriginLookup } from "./cors.js";
 import type { Db } from "./db.js";
 import type { Embedder } from "./rag/embedder.js";
+import { registerAssistantRoutes } from "./admin/assistant.js";
+import { registerInsightRoutes } from "./admin/insights.js";
 import { registerKnowledgeRoutes } from "./admin/knowledge.js";
 import { registerChatRoutes } from "./chat/routes.js";
 import { HttpError } from "./http.js";
@@ -121,6 +123,8 @@ export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): Fasti
 
   void app.register(multipart, { limits: { fileSize: 20 * 1024 * 1024, files: 1 } });
   registerKnowledgeRoutes(app);
+  registerAssistantRoutes(app);
+  registerInsightRoutes(app);
   // Rate limiting is opt-in per route (config.rateLimit); the plugin must load before those routes.
   void app.register(rateLimit, { global: false });
   void app.register(async (scope) => {

@@ -7,6 +7,7 @@ import { createApp } from "../../src/app.js";
 import { createMemoryBlobStore } from "../../src/blob.js";
 import { createHashEmbedder } from "../../src/rag/embedder.js";
 import { createRetriever } from "../../src/rag/retriever.js";
+import { multipart } from "./helpers.js";
 import { createTestDb } from "./pglite.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
@@ -42,15 +43,6 @@ afterAll(async () => {
   await app.close();
   await h.close();
 });
-
-function multipart(filename: string, buf: Buffer, contentType: string) {
-  const b = "----testboundary";
-  const head = Buffer.from(
-    `--${b}\r\nContent-Disposition: form-data; name="file"; filename="${filename}"\r\nContent-Type: ${contentType}\r\n\r\n`,
-  );
-  const tail = Buffer.from(`\r\n--${b}--\r\n`);
-  return { payload: Buffer.concat([head, buf, tail]), headers: { "content-type": `multipart/form-data; boundary=${b}` } };
-}
 
 async function upload(filename: string, buf: Buffer, contentType: string, query = "", token = "admin") {
   const m = multipart(filename, buf, contentType);
