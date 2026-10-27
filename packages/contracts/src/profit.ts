@@ -34,7 +34,8 @@ export const ProfitReportSchema = z.object({
   currency: z.literal("IDR"),
   from: DateStr,
   to: DateStr,
-  as_of: z.string().datetime(),
+  // S1: POS clocks may report a local offset ("+07:00").
+  as_of: z.string().datetime({ offset: true }),
 });
 export type ProfitReport = z.infer<typeof ProfitReportSchema>;
 

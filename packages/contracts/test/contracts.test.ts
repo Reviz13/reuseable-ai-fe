@@ -1,6 +1,8 @@
 import { describe, expect, it } from "vitest";
 import {
+  AssistantConfigSchema,
   ChatRequestSchema,
+  ProfitReportSchema,
   GetProfitArgsSchema,
   JwtClaimsSchema,
   encodeSse,
@@ -28,5 +30,28 @@ describe("contracts", () => {
 
   it("encodeSse formats an event", () => {
     expect(encodeSse({ type: "token", text: "hi" })).toBe('event: token\ndata: {"type":"token","text":"hi"}\n\n');
+  });
+
+  it("ProfitReport.as_of accepts a UTC offset (S1)", () => {
+    const r = {
+      sales: 1, cogs: 1, profit: 0, transactions: 1, missing_cost_items: 0, currency: "IDR",
+      from: "2026-10-27", to: "2026-10-27",
+    };
+    expect(ProfitReportSchema.safeParse({ ...r, as_of: "2026-10-27T12:00:00+07:00" }).success).toBe(true);
+    expect(ProfitReportSchema.safeParse({ ...r, as_of: "2026-10-27T05:00:00.000Z" }).success).toBe(true);
+    expect(ProfitReportSchema.safeParse({ ...r, as_of: "2026-10-27 12:00" }).success).toBe(false);
+  });
+
+  it("AssistantConfig stores allowed_origins as bare origins (S14)", () => {
+    const cfg = {
+      name: "Tepi", persona_prompt: "p", language: "id", llm_adapter: "claude", llm_model: "m",
+      fallback_adapter: null, theme: { accent: "#123456" }, min_score: 0.78,
+    };
+    const out = AssistantConfigSchema.parse({
+      ...cfg,
+      allowed_origins: ["http://localhost:3000/", "https://pos.example.com/kasir?x=1", "HTTPS://POS.example.com:443"],
+    });
+    expect(out.allowed_origins).toEqual(["http://localhost:3000", "https://pos.example.com", "https://pos.example.com"]);
+    expect(AssistantConfigSchema.safeParse({ ...cfg, allowed_origins: ["not a url"] }).success).toBe(false);
   });
 });

@@ -23,7 +23,9 @@ export const AssistantConfigSchema = z.object({
   llm_model: z.string(),
   fallback_adapter: z.enum(["claude", "openai_compat"]).nullable(),
   theme: z.object({ accent: z.string() }),
-  allowed_origins: z.array(z.string().url()),
+  // S14: stored as bare origins ("http://localhost:3000/" -> "http://localhost:3000"), the form the
+  // browser sends in the Origin header and CORS compares against.
+  allowed_origins: z.array(z.string().url().transform((u) => new URL(u).origin)),
   min_score: z.number().min(0).max(1),
 });
 export type AssistantConfig = z.infer<typeof AssistantConfigSchema>;

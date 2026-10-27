@@ -108,6 +108,12 @@ describe("assistant config", () => {
     expect((await get("/admin/pos/assistant", "nopos")).statusCode).toBe(403);
     expect((await send("PUT", "/admin/pos/assistant", validConfig(), "nopos")).statusCode).toBe(403);
   });
+  it("stores allowed_origins as bare origins, so a trailing slash still matches the Origin header (S14)", async () => {
+    const r = await send("PUT", "/admin/pos/assistant", { ...validConfig(), allowed_origins: ["http://localhost:3000/"] });
+    expect(r.statusCode).toBe(200);
+    const [row] = await h.db.query<{ allowed_origins: string[] }>("select allowed_origins from assistants where app = 'pos'");
+    expect(row!.allowed_origins).toEqual(["http://localhost:3000"]);
+  });
 });
 
 describe("avatar upload", () => {

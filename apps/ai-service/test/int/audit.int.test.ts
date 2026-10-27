@@ -49,3 +49,9 @@ it("logs and does not throw when the insert fails", async () => {
   ).resolves.toBeUndefined();
   expect(logger).toHaveBeenCalled();
 });
+
+it("audit_log rejects TRUNCATE (S2, migration 0005)", async () => {
+  await expect(db.query("truncate audit_log")).rejects.toThrow(/append-only/);
+  const rows = await db.query("select 1 from audit_log");
+  expect(rows.length).toBeGreaterThan(0);
+});
