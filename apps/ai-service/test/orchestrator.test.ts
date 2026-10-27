@@ -955,6 +955,10 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
       expect(t).not.toContain("9.999.000");
       expect(t).not.toContain("1000000");
       expect(t).not.toContain("999.999");
+      // Ruling 55: also with invisible format characters removed (what the reader sees).
+      const visible = t.replace(/[\p{Cf}᠎͏]/gu, "");
+      expect(visible).not.toContain("9999000");
+      expect(visible).not.toContain("9.999.000");
       expect(t.normalize("NFKC")).not.toMatch(/9\D{0,3}999\D{0,3}000|9999000/);
     }
   };
@@ -989,6 +993,14 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
     ["entity digit (M1)", "Profit Rp&#57;.999.000."],
     ["entity lt/gt", "Profit &lt;9.999.000&gt;"],
     ["hex entity dots", "Profit 9&#x2E;999&#x2E;000"],
+    // Ruling 55: invisible format characters inside a figure.
+    ["word joiner U+2060", "Profit 9⁠999⁠000"],
+    ["soft hyphen U+00AD", "Profit 9­999­000"],
+    ["LRM U+200E", "Profit 9‎.999‎.000"],
+    ["isolates U+2066/U+2069", "Profit Rp9⁦.999⁩.000"],
+    ["Mongolian vowel separator U+180E", "Profit 9᠎999᠎000"],
+    ["invisible times U+2062", "Profit 9⁢999⁢000"],
+    ["RLM U+200F", "Profit 9‏999‏000"],
   ];
   const modes: [string, (s: string) => string[]][] = [
     ["whole", (s) => [s]],

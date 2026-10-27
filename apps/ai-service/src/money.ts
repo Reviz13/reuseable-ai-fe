@@ -97,7 +97,7 @@ function decodeEntity(whole: string, body: string): string {
  *   (numeric with or without ";", the common named ones), markdown backslash escapes undone, so
  *   `9\.999\.000`, `9&#46;999&#46;000` and `9<span></span>.999.000` read as 9.999.000.
  * - N2: markdown links read as their text (`[9](x).[999](y)` -> "9.999"), so link text cannot split a figure.
- * - NFKC (full-width digits/letters, NBSP), combining marks and zero-width characters removed,
+ * - NFKC (full-width digits/letters, NBSP), combining marks and invisible format characters removed,
  *   U+2212 as "-", look-alike Cyrillic/Greek letters mapped, markdown emphasis/code characters removed.
  *
  * N1/N2/Ruling 53: tag stripping, link flattening and entity decoding are interpretations, never the
@@ -125,7 +125,9 @@ export function normalizeForCheck(text: string, opts: CheckOptions = {}): string
   return (opts.flattenLinks === false ? unescaped : flattenLinks(unescaped))
     .normalize("NFKC")
     .replace(/\p{M}/gu, "")
-    .replace(/[​-‍﻿]/g, "")
+    // Ruling 55: every invisible format character (\p{Cf}: zero-width, word joiner, soft hyphen,
+    // LRM/RLM, bidi isolates, invisible operators, BOM) plus U+180E and U+034F. Removal only joins.
+    .replace(/[\p{Cf}᠎͏]/gu, "")
     .replace(/−/g, "-")
     .replace(/[РрΡρ]/g, (c) => CONFUSABLES[c]!)
     .replace(/[*_~`]/g, "");
