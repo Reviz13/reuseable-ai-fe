@@ -219,3 +219,51 @@ describe("knowledge admin api", () => {
     expect(Object.keys(dup!.params).sort()).toEqual(["checksum", "deduped", "document_id", "title", "version_id"]);
   });
 });
+
+describe("review fixes", () => {
+  it("malformed bodies return 400 bad_request, not 500", async () => {
+    const r = await send("POST", "/admin/pos/faqs", {});
+    expect(r.statusCode).toBe(400);
+    const j = r.json() as { error: string; issues: { path: unknown; message: string }[] };
+    expect(j.error).toBe("bad_request");
+    expect(j.issues.length).toBeGreaterThan(0);
+    const up = await upload("act.md", Buffer.from("# A\n\nisi activate"), MD);
+    const { document_id } = up.json() as { document_id: string };
+    await waitDone(document_id);
+    expect((await send("POST", `/admin/pos/documents/${document_id}/activate`, {})).statusCode).toBe(400);
+    expect((await send("POST", `/admin/pos/documents/${document_id}/activate`, { version_id: "nope" })).statusCode).toBe(400);
+  });
+
+  it("failed v2 keeps v1 active and ready (ruling 19); activating it is 409 (ruling 20)", async () => {
+    const r1 = await upload("keep.md", Buffer.from("# Keep\n\nkebijakan narwhal tetap"), MD);
+    const a = r1.json() as { document_id: string; version_id: string };
+    await waitDone(a.document_id);
+    const r2 = await upload("scanned.pdf", fx("scanned.pdf"), "application/pdf", `?document_id=${a.document_id}`);
+    expect(r2.statusCode).toBe(202);
+    const b = r2.json() as { version_id: string };
+    const doc = await waitDone(a.document_id);
+    expect(doc.status).toBe("ready");
+    expect(doc.active_version_id).toBe(a.version_id);
+    const v2 = doc.versions.find((v) => (v as { id?: string }).id === b.version_id) as { error: string | null } | undefined;
+    expect(v2?.error).toBe("no extractable text");
+    expect((await search("kebijakan narwhal tetap")).some((c) => c.document_id === a.document_id && c.content.includes("narwhal"))).toBe(true);
+    const act = await send("POST", `/admin/pos/documents/${a.document_id}/activate`, { version_id: b.version_id });
+    expect(act.statusCode).toBe(409);
+  });
+
+  it("md upload with application/octet-stream is accepted; pdf stays strict", async () => {
+    const r = await upload("oct.md", Buffer.from("# Oct\n\nisi octet stream"), "application/octet-stream");
+    expect(r.statusCode).toBe(202);
+    await waitDone((r.json() as { document_id: string }).document_id);
+    expect((await upload("x.pdf", Buffer.from("x"), "application/octet-stream")).statusCode).toBe(415);
+  });
+
+  it("cross-app ids are 404 for upload target, activate and faq put", async () => {
+    const [d] = await h.db.query<{ id: string }>("insert into documents (app, kind, title, status) values ('banking','file','b','ready') returning id");
+    const [f] = await h.db.query<{ id: string }>("insert into documents (app, kind, title, status) values ('banking','faq','bq','ready') returning id");
+    const [v] = await h.db.query<{ id: string }>("insert into document_versions (document_id, version) values ($1, 1) returning id", [d!.id]);
+    expect((await upload("c.md", Buffer.from("# C\n\nlintas app"), MD, `?document_id=${d!.id}`)).statusCode).toBe(404);
+    expect((await send("POST", `/admin/pos/documents/${d!.id}/activate`, { version_id: v!.id })).statusCode).toBe(404);
+    expect((await send("PUT", `/admin/pos/faqs/${f!.id}`, { question: "q", answer: "a" })).statusCode).toBe(404);
+  });
+});

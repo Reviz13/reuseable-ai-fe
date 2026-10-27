@@ -28,7 +28,7 @@ export async function extractText(buf: Buffer, mime: string): Promise<string> {
 async function pdfText(buf: Buffer): Promise<string> {
   const parser = new PDFParse({ data: new Uint8Array(buf) });
   try {
-    return (await parser.getText({ pageJoiner: "" })).text;
+    return (await parser.getText({ pageJoiner: "\n" })).text;
   } finally {
     await parser.destroy();
   }

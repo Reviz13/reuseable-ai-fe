@@ -128,7 +128,11 @@ export function registerKnowledgeRoutes(app: FastifyInstance): void {
       const filename = part.filename.split(/[\\/]/).pop() ?? "";
       const dot = filename.lastIndexOf(".");
       const ext = dot >= 0 ? filename.slice(dot).toLowerCase() : "";
-      const mime = part.mimetype.split(";")[0]!.trim().toLowerCase();
+      let mime = part.mimetype.split(";")[0]!.trim().toLowerCase();
+      // Windows browsers often send text files as octet-stream or no type: for .md/.txt the extension decides.
+      if ((ext === ".md" || ext === ".txt") && (mime === "" || mime === "application/octet-stream")) {
+        mime = ext === ".md" ? "text/markdown" : "text/plain";
+      }
       if (!ALLOWED[ext]?.includes(mime)) {
         part.file.resume();
         throw new HttpError(415, "unsupported file type");

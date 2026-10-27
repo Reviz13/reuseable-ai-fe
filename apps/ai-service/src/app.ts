@@ -1,5 +1,6 @@
 import cors from "@fastify/cors";
 import multipart from "@fastify/multipart";
+import { ZodError } from "zod";
 import Fastify, { type FastifyInstance, type FastifyReply, type FastifyRequest } from "fastify";
 import { AppIdSchema, type AppId, type JwtClaims } from "@ai/contracts";
 import { AuthError } from "./auth/errors.js";
@@ -79,6 +80,13 @@ export function createApp(deps: AppDeps, opts: { logger?: boolean } = {}): Fasti
 
   app.setErrorHandler((err: Error, _req, reply) => {
     if (err instanceof AuthError) return reply.code(401).send({ error: "unauthorized" });
+    if (err instanceof ZodError) {
+      app.log.info({ issues: err.issues.length }, "bad request body");
+      return reply.code(400).send({
+        error: "bad_request",
+        issues: err.issues.map((i) => ({ path: i.path, message: i.message })),
+      });
+    }
     const status = (err as { statusCode?: number }).statusCode;
     if (status && status < 500) return reply.code(status).send({ error: err.message });
     app.log.error(err);
