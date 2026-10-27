@@ -119,6 +119,16 @@ describe("db", () => {
     await expect(db.query("delete from audit_log")).rejects.toThrow(/append-only/);
   });
 
+  it("functions pin search_path", async () => {
+    const rows = await db.query<{ proname: string; proconfig: string[] | null }>(
+      "select proname, proconfig from pg_proc where proname in ('match_chunks','audit_log_append_only')",
+    );
+    expect(rows).toHaveLength(2);
+    for (const r of rows) {
+      expect(r.proconfig ?? [], r.proname).toContain("search_path=public, pg_temp");
+    }
+  });
+
   it("deleting a conversation cascades to messages", async () => {
     const [c] = await db.query<{ id: string }>("insert into conversations (app, user_id) values ('pos','u1') returning id");
     await db.query("insert into messages (conversation_id, role, content) values ($1,'user','hi')", [c!.id]);
