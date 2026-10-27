@@ -18,7 +18,9 @@ export function createAdminVerifier(deps: {
     }
     if (!user) throw new AuthError("invalid token");
     const rows = await deps.db.query<{ apps: AppId[] }>("select apps from admins where user_id = $1", [user.id]);
-    if (rows.length === 0) throw new AuthError("not an admin");
-    return { user_id: user.id, apps: rows[0]!.apps };
+    // Spec section 7 (M7): a valid session without an admins row has no apps, so requireAdmin
+    // answers 403 and Studio signs the user out with the message (Rulings 40/42). Only an invalid
+    // token is 401.
+    return { user_id: user.id, apps: rows[0]?.apps ?? [] };
   };
 }
