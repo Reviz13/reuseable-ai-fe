@@ -98,11 +98,19 @@ export function sentinelTrips(text: string): boolean {
   return CURRENCY_MARKER_RE.test(n) || GROUPED_RE.test(n);
 }
 
-/** Ruling 29(a): profit vocabulary in the user's message. */
-const PROFIT_CONTEXT_RE = /\b(profit|laba|untung|rugi|omzet|omset|penjualan|pendapatan|hpp|keuntungan|margin)\b/i;
+/**
+ * Rulings 29(a)/31: the one profit vocabulary, used for the current user message, the previous user
+ * message in history, and the held answer text.
+ */
+export const PROFIT_WORD_RE = /\b(profit|laba|untung|rugi|omzet|omset|penjualan|pendapatan|hpp|keuntungan|margin)\b/i;
+
+/** A profit word in `text`, checked on the normalized checking copy. */
+export function mentionsProfit(text: string | undefined): boolean {
+  return !!text && PROFIT_WORD_RE.test(normalizeForCheck(text));
+}
 
 export function isProfitContext(message: string, getProfitCalled: boolean): boolean {
-  return getProfitCalled || PROFIT_CONTEXT_RE.test(normalizeForCheck(message));
+  return getProfitCalled || mentionsProfit(message);
 }
 
 /**

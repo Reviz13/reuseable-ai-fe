@@ -807,3 +807,53 @@ describe("runChat: Ruling 29 semantic backstop (9.999.000 must never reach a tok
     expect(r!.text).not.toContain("1.250 transaksi");
   });
 });
+
+describe("runChat: Ruling 31 profit-context from follow-ups and answer text", () => {
+  const fresh = () => new AbortController().signal;
+  const never = (events: SseEvent[]) => {
+    for (const t of tokens(events)) expect(t.normalize("NFKC")).not.toMatch(/9\.?999\.?000/);
+  };
+  const profitHistory = [
+    { role: "user" as const, content: "Profit minggu ini?" },
+    { role: "assistant" as const, content: "Profit minggu ini Rp2.550.000." },
+  ];
+  const run = async (message: string, history: { role: "user" | "assistant"; content: string }[], answer: string[], chunks: RetrievedChunk[] = []) => {
+    const llm = createFakeAdapter([[...answer.map(text), end()]]);
+    const s = setup({ llm, chunks });
+    const r = await runChat(s.deps, { ...input("owner", message), history }, s.emit, fresh());
+    return { s, r: r! };
+  };
+
+  it.each([["Bulan lalu 9.999.000."], ["Sekitar 9.999.000,-"]])(
+    "(i) follow-up after a profit question: %j -> NO_DATA",
+    async (answer) => {
+      const { s, r } = await run("Kalau bulan lalu?", profitHistory, [answer]);
+      never(s.events);
+      expect(r.guardrailReplaced).toBe(true);
+      expect(r.text.endsWith(NO_DATA)).toBe(true);
+    },
+  );
+
+  it("(i) also when the answer is split into chunks", async () => {
+    const { s, r } = await run("Kalau bulan lalu?", profitHistory, ["Bulan ", "lalu 9.", "999.000."]);
+    never(s.events);
+    expect(r.guardrailReplaced).toBe(true);
+  });
+
+  it("(ii) profit word in the answer itself: 'Laba bulan lalu 9.999.000.' -> NO_DATA", async () => {
+    const { s, r } = await run("q", [], ["Laba bulan lalu 9.999.000."]);
+    never(s.events);
+    expect(r.guardrailReplaced).toBe(true);
+    expect(r.text.endsWith(NO_DATA)).toBe(true);
+  });
+
+  it("non-profit history and question: 'maksimal 1.000 item' is released unchanged", async () => {
+    const history = [
+      { role: "user" as const, content: "Cara buka laci kasir?" },
+      { role: "assistant" as const, content: "Tekan tombol laci." },
+    ];
+    const { r } = await run("Cara refund?", history, ["Refund ", "maksimal ", "1.000 ", "item."], [chunk("a", "d1", 0.9)]);
+    expect(r.guardrailReplaced).toBe(false);
+    expect(r.text).toBe("Refund maksimal 1.000 item.");
+  });
+});

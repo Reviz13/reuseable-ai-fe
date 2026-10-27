@@ -3,7 +3,7 @@ import type { AuditWriter } from "../audit.js";
 import { EMPTY, FORBIDDEN, NO_DATA, NOT_FOUND, UPSTREAM } from "../copy.js";
 import type { AdapterName } from "../llm/gateway.js";
 import type { LlmAdapter, LlmMessage, LlmToolCall } from "../llm/types.js";
-import { isProfitContext, mentionsCurrency, parseGuardrailAmounts } from "../money.js";
+import { isProfitContext, mentionsCurrency, mentionsProfit, parseGuardrailAmounts } from "../money.js";
 import { applyProfitGuardrail, type LabeledReport } from "../profit/guardrail.js";
 import type { PosAdapter } from "../profit/posAdapter.js";
 import type { RetrievedChunk } from "../rag/retriever.js";
@@ -192,8 +192,13 @@ export async function runChat(
   // Replacement copy is a new paragraph when text already streamed, never glued to the preamble.
   const emitReplacement = (copy: string) => emitText(text.trim() ? `\n\n${copy}` : copy);
   const held = sentinel.held;
-  // Ruling 29(a): uncovered grouped numbers are candidate amounts in profit-context turns.
-  const profitContext = isProfitContext(input.message, toolCalls.some((t) => t.name === "get_profit"));
+  // Rulings 29(a)/31: uncovered grouped numbers are candidate amounts in profit-context turns: a
+  // get_profit call, or a profit word in this message, the previous user message, or the answer.
+  const previousUser = [...(input.history as { role: string; content: string }[])].reverse().find((m) => m.role === "user");
+  const profitContext =
+    isProfitContext(input.message, toolCalls.some((t) => t.name === "get_profit")) ||
+    mentionsProfit(previousUser?.content) ||
+    mentionsProfit(held);
   if (held) {
     if (profitResults.length > 0) {
       const g = applyProfitGuardrail(held, profitResults);
