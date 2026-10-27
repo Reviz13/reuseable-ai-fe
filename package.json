@@ -4,13 +4,18 @@
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "test": "pnpm -r test",
-    "typecheck": "pnpm -r typecheck",
+    "typecheck": "pnpm -r typecheck && tsc -p tsconfig.json",
     "build:widget": "pnpm --filter widget build",
     "dev": "pnpm build:widget && concurrently -k -n pos,ai,studio -c yellow,cyan,magenta \"dotenv -e .env -- pnpm --filter mock-pos dev\" \"dotenv -e .env -- pnpm --filter ai-service dev\" \"dotenv -e .env -- pnpm --filter studio dev\"",
     "seed:admin": "dotenv -e .env -- tsx scripts/seed-admin.ts",
-    "seed:avatars": "dotenv -e .env -- tsx scripts/seed-avatars.ts"
+    "seed:avatars": "dotenv -e .env -- tsx scripts/seed-avatars.ts",
+    "e2e:local": "npm --prefix packages/widget run build && playwright test -c e2e/playwright.config.ts",
+    "test:e2e": "dotenv -e .env -v E2E_EXTERNAL=1 -- playwright test -c e2e/playwright.config.ts",
+    "eval": "dotenv -e .env -- tsx evals/run.ts",
+    "test:evals": "vitest run -c evals/vitest.config.ts"
   },
   "devDependencies": {
+    "@playwright/test": "1.52.0",
     "@supabase/supabase-js": "^2.118.0",
     "@types/node": "^22.0.0",
     "@types/pg": "^8.11.0",

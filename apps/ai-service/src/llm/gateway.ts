@@ -1,5 +1,7 @@
 import type { Config } from "../config.js";
+import { readFileSync } from "node:fs";
 import { createClaudeAdapter } from "./claude.js";
+import { createScriptFileAdapter } from "./fake.js";
 import { createOpenAICompatAdapter } from "./openaiCompat.js";
 import { LlmUnavailableError, type LlmAdapter, type LlmChunk, type LlmRequest } from "./types.js";
 
@@ -61,6 +63,12 @@ function unavailable(message: string): LlmAdapter {
 export function createGatewayFor(
   config: Config,
 ): (assistant: { llm_adapter: AdapterName; fallback_adapter: AdapterName | null }) => LlmAdapter {
+  // Test hook (brief Task 15 / Ruling 45): every assistant gets the scripted fake. loadConfig already drops
+  // LLM_FAKE_SCRIPT when NODE_ENV=production; checked again here so the hook can never reach production.
+  if (config.llmFakeScript && process.env.NODE_ENV !== "production") {
+    const fake = createScriptFileAdapter(config.llmFakeScript, (p) => readFileSync(p, "utf8"));
+    return () => fake;
+  }
   const cache = new Map<AdapterName, LlmAdapter>();
   const build = (name: AdapterName): LlmAdapter => {
     const hit = cache.get(name);

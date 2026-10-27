@@ -342,3 +342,14 @@ describe("chat flow", () => {
     });
   });
 });
+
+describe("upgrade", () => {
+  // Real browsers upgrade an element created before customElements.define by running the constructor on
+  // it; a class field would then overwrite a getToken the host already set (found by the Task 15 E2E:
+  // React sets it through a ref before the widget script loads). happy-dom does not upgrade existing
+  // elements, so this pins the cause: construction must not create an own getToken property.
+  it("construction does not define an own getToken property", () => {
+    const el = document.createElement("ai-assistant");
+    expect(Object.prototype.hasOwnProperty.call(el, "getToken")).toBe(false);
+  });
+});

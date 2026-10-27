@@ -8,8 +8,12 @@ type Send = (text: string) => void;
 export class AiAssistantElement extends HTMLElement {
   static observedAttributes = ["app", "api", "position", "open", "lang"];
 
-  /** Host-provided token source. Held in memory only; never persisted. */
-  getToken?: () => Promise<string>;
+  /**
+   * Host-provided token source. Held in memory only; never persisted.
+   * `declare` (no class field): hosts often set it before the script loads (e.g. a React ref on the
+   * not-yet-upgraded element). A class field would redefine it as undefined on upgrade. Found by E2E.
+   */
+  declare getToken?: () => Promise<string>;
 
   private opened = false;
   private connected = false;

@@ -5,6 +5,11 @@ const optional = z.string().min(1).optional();
 const IssuersSchema = z.record(AppIdSchema, z.string().url());
 
 const EnvSchema = z.object({
+  NODE_ENV: optional,
+  /** Ruling 45: dev-only in-process mode (PGlite, memory blob, hash embedder). Refused in production. */
+  LOCAL_MODE: optional,
+  /** Test hook: path to a fake LLM script (see src/llm/fake.ts). Ignored when NODE_ENV=production. */
+  LLM_FAKE_SCRIPT: optional,
   DATABASE_URL: z.string().min(1),
   SUPABASE_URL: z.string().url(),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
@@ -18,10 +23,24 @@ const EnvSchema = z.object({
   WIDGET_DIR: z.string().min(1).default("../../packages/widget/dist"),
 });
 
+// LOCAL_MODE needs no database or Supabase project.
+const LocalEnvSchema = EnvSchema.extend({
+  DATABASE_URL: optional,
+  SUPABASE_URL: z.string().url().optional(),
+  SUPABASE_SERVICE_ROLE_KEY: optional,
+});
+
 export interface Config {
   port: number;
+  /** Ruling 45: LOCAL_MODE=1. Never true with NODE_ENV=production (loadConfig throws instead). */
+  localMode: boolean;
+  /** LLM_FAKE_SCRIPT; always undefined when NODE_ENV=production. */
+  llmFakeScript?: string;
+  /** Empty in local mode. */
   databaseUrl: string;
+  /** Empty in local mode. */
   supabaseUrl: string;
+  /** Empty in local mode. */
   supabaseServiceKey: string;
   appIssuers: Partial<Record<AppId, string>>;
   posBaseUrl: string;
@@ -35,7 +54,12 @@ export interface Config {
 export function loadConfig(env: Record<string, string | undefined>): Config {
   // Empty strings (as in a copied .env.example) are treated as unset.
   const cleaned = Object.fromEntries(Object.entries(env).filter(([, v]) => v !== undefined && v !== ""));
-  const parsed = EnvSchema.safeParse(cleaned);
+  const production = cleaned.NODE_ENV === "production";
+  const localMode = cleaned.LOCAL_MODE === "1";
+  if (localMode && production) {
+    throw new Error("Invalid configuration: LOCAL_MODE=1 is dev-only and refused when NODE_ENV=production");
+  }
+  const parsed = (localMode ? LocalEnvSchema : EnvSchema).safeParse(cleaned);
   if (!parsed.success) {
     const msg = parsed.error.issues.map((i) => `${i.path.join(".") || "env"}: ${i.message}`).join("; ");
     throw new Error(`Invalid configuration: ${msg}`);
@@ -53,9 +77,11 @@ export function loadConfig(env: Record<string, string | undefined>): Config {
   }
   return {
     port: e.PORT,
-    databaseUrl: e.DATABASE_URL,
-    supabaseUrl: e.SUPABASE_URL,
-    supabaseServiceKey: e.SUPABASE_SERVICE_ROLE_KEY,
+    localMode,
+    llmFakeScript: production ? undefined : e.LLM_FAKE_SCRIPT,
+    databaseUrl: e.DATABASE_URL ?? "",
+    supabaseUrl: e.SUPABASE_URL ?? "",
+    supabaseServiceKey: e.SUPABASE_SERVICE_ROLE_KEY ?? "",
     appIssuers: issuers.data,
     posBaseUrl: e.POS_BASE_URL,
     posInternalKey: e.POS_INTERNAL_KEY,

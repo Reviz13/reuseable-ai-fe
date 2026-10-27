@@ -57,7 +57,7 @@ function fnv1a(s: string, seed = 0x811c9dc5): number {
   return h >>> 0;
 }
 
-/** Deterministic bag-of-words hash embedder. For tests only. */
+/** Deterministic bag-of-words hash embedder. For tests and LOCAL_MODE only (no model download). */
 export function createHashEmbedder(): Embedder {
   return {
     model: "hash-384",
