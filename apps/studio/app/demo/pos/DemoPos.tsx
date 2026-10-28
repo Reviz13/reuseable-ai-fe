@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Dashboard } from "./Dashboard";
 import s from "./pos.module.css";
 
 type Role = "owner" | "cashier";
@@ -46,8 +47,8 @@ const SUGGESTIONS: Record<Role, string> = {
   cashier: "Bagaimana cara membuka shift? | Bagaimana cara refund transaksi? | Profit hari ini?",
 };
 const AFTER_SALE: Record<Role, { label: string; question: string }> = {
-  owner: { label: "Tanya AI: profit hari ini", question: "Profit hari ini?" },
-  cashier: { label: "Tanya AI: cara refund", question: "Bagaimana cara refund transaksi?" },
+  owner: { label: "Tanya NEXUS: profit hari ini", question: "Profit hari ini?" },
+  cashier: { label: "Tanya NEXUS: cara refund", question: "Bagaimana cara refund transaksi?" },
 };
 
 const rupiah = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
@@ -76,6 +77,7 @@ function useTween(value: number): number {
 
 export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
   const [role, setRole] = useState<Role>("owner");
+  const [view, setView] = useState<"kasir" | "dashboard">("kasir");
   const [cat, setCat] = useState<Cat | "all">("all");
   const [query, setQuery] = useState("");
   const [cart, setCart] = useState<Line[]>([]);
@@ -167,6 +169,13 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
             </div>
           </div>
         </div>
+        <nav className={s.views} aria-label="Halaman">
+          {(["kasir", "dashboard"] as const).map((v) => (
+            <button key={v} type="button" className={s.view} aria-pressed={view === v} onClick={() => setView(v)}>
+              {v === "kasir" ? "🧾 Kasir" : "📊 Dashboard"}
+            </button>
+          ))}
+        </nav>
         <div className={s.headRight}>
           <span className={s.session}>
             Sesi ini: <strong>{session.count}</strong> transaksi · <strong>{rupiah(session.revenue)}</strong>
@@ -180,169 +189,173 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
             ))}
           </div>
           <button type="button" className={s.askAi} onClick={() => askAi()}>
-            ✨ Tanya AI
+            ✨ Tanya NEXUS
           </button>
         </div>
       </header>
 
-      <div className={s.layout}>
-        <main>
-          <div className={s.tools}>
-            <input
-              className={s.search}
-              type="search"
-              placeholder="Cari menu…"
-              aria-label="Cari menu"
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-            />
-            <div className={s.tabs} role="group" aria-label="Kategori">
-              {(["all", "kopi", "nonkopi", "makanan"] as const).map((c) => (
-                <button key={c} type="button" className={s.tab} aria-pressed={cat === c} onClick={() => setCat(c)}>
-                  {c === "all" ? "Semua" : CAT_STYLE[c].label}
-                  <span className={s.tabCount}>{count(c)}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {visible.length === 0 ? (
-            <p className={s.empty}>Menu &ldquo;{query}&rdquo; tidak ditemukan.</p>
-          ) : (
-            <ul className={s.grid}>
-              {visible.map((p) => {
-                const qty = qtyOf(p.id);
-                const popped = bump?.id === p.id;
-                return (
-                  <li key={p.id}>
-                    <button
-                      type="button"
-                      className={`${s.product} ${qty ? s.inCart : ""}`}
-                      onClick={() => add(p.id)}
-                      aria-label={`Tambah ${p.name}, ${rupiah(p.price)}${qty ? `, ${qty} di keranjang` : ""}`}
-                    >
-                      {qty > 0 && (
-                        <span key={popped ? bump!.n : 0} className={s.badge} aria-hidden>
-                          {qty}
-                        </span>
-                      )}
-                      <span
-                        key={popped ? `e${bump!.n}` : "e"}
-                        className={`${s.emoji} ${popped ? s.pop : ""}`}
-                        style={{ background: CAT_STYLE[p.cat].bg }}
-                        aria-hidden
-                      >
-                        {p.emoji}
-                      </span>
-                      <span className={s.cat} style={{ background: CAT_STYLE[p.cat].bg, color: CAT_STYLE[p.cat].ink }}>
-                        {CAT_STYLE[p.cat].label}
-                      </span>
-                      <span className={s.name}>{p.name}</span>
-                      <span className={s.price}>{rupiah(p.price)}</span>
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-        </main>
-
-        <aside className={s.cart} aria-label="Keranjang">
-          <div className={s.cartHead}>
-            <h2 className={s.cartTitle}>Pesanan</h2>
-            <span className={s.order}>#{order}</span>
-          </div>
-          {cart.length === 0 ? (
-            <div className={s.cartEmpty}>
-              <span className={s.cartEmptyIcon} aria-hidden>
-                🛒
-              </span>
-              <span>Keranjang kosong. Ketuk menu untuk menambah.</span>
-            </div>
-          ) : (
-            <ul className={s.lines}>
-              {cart.map((l) => {
-                const p = BY_ID.get(l.id)!;
-                return (
-                  <li key={l.id} className={s.line}>
-                    <span className={s.lineName}>{p.name}</span>
-                    <span className={s.lineTotal}>{rupiah(p.price * l.qty)}</span>
-                    <span className={s.qty}>
-                      <button type="button" className={s.qtyBtn} aria-label={`Kurangi ${p.name}`} onClick={() => setQty(l.id, l.qty - 1)}>
-                        −
-                      </button>
-                      <span className={s.qtyN}>{l.qty}</span>
-                      <button type="button" className={s.qtyBtn} aria-label={`Tambah ${p.name}`} onClick={() => setQty(l.id, l.qty + 1)}>
-                        +
-                      </button>
-                    </span>
-                    <button type="button" className={s.remove} onClick={() => setQty(l.id, 0)}>
-                      Hapus
-                    </button>
-                  </li>
-                );
-              })}
-            </ul>
-          )}
-
-          <div className={s.summary}>
-            <div className={s.row}>
-              <span>Subtotal</span>
-              <span>{rupiah(subtotal)}</span>
-            </div>
-            <div className={s.row}>
-              <span>PPN 11%</span>
-              <span>{rupiah(tax)}</span>
-            </div>
-            <div className={`${s.row} ${s.total}`}>
-              <span>Total</span>
-              <span>{rupiah(shownTotal)}</span>
-            </div>
-          </div>
-
-          <div className={s.pay}>
-            <div className={s.methods} role="group" aria-label="Metode bayar">
-              <button type="button" className={s.method} aria-pressed={method === "cash"} onClick={() => setMethod("cash")}>
-                💵 Tunai
-              </button>
-              <button type="button" className={s.method} aria-pressed={method === "qris"} onClick={() => setMethod("qris")}>
-                📱 QRIS
-              </button>
-            </div>
-            {method === "cash" && (
-              <>
-                <div className={s.quick}>
-                  <button type="button" className={s.quickBtn} onClick={() => setCashText(String(total))} disabled={!total}>
-                    Uang pas
+      {view === "kasir" ? (
+        <div className={s.layout}>
+          <main>
+            <div className={s.tools}>
+              <input
+                className={s.search}
+                type="search"
+                placeholder="Cari menu…"
+                aria-label="Cari menu"
+                value={query}
+                onChange={(e) => setQuery(e.target.value)}
+              />
+              <div className={s.tabs} role="group" aria-label="Kategori">
+                {(["all", "kopi", "nonkopi", "makanan"] as const).map((c) => (
+                  <button key={c} type="button" className={s.tab} aria-pressed={cat === c} onClick={() => setCat(c)}>
+                    {c === "all" ? "Semua" : CAT_STYLE[c].label}
+                    <span className={s.tabCount}>{count(c)}</span>
                   </button>
-                  {QUICK_CASH.map((v) => (
-                    <button key={v} type="button" className={s.quickBtn} onClick={() => setCashText(String(v))}>
-                      {rupiah(v)}
-                    </button>
-                  ))}
-                </div>
-                <input
-                  className={s.cash}
-                  inputMode="numeric"
-                  placeholder="Uang diterima"
-                  aria-label="Uang diterima"
-                  value={cash ? cash.toLocaleString("id-ID") : ""}
-                  onChange={(e) => setCashText(e.target.value)}
-                />
-                {cash > 0 && total > 0 && (
-                  <div className={`${s.change} ${cash < total ? s.short : ""}`}>
-                    {cash < total ? "Kurang " : "Kembalian "}
-                    <strong>{rupiah(Math.abs(cash - total))}</strong>
-                  </div>
-                )}
-              </>
+                ))}
+              </div>
+            </div>
+
+            {visible.length === 0 ? (
+              <p className={s.empty}>Menu &ldquo;{query}&rdquo; tidak ditemukan.</p>
+            ) : (
+              <ul className={s.grid}>
+                {visible.map((p) => {
+                  const qty = qtyOf(p.id);
+                  const popped = bump?.id === p.id;
+                  return (
+                    <li key={p.id}>
+                      <button
+                        type="button"
+                        className={`${s.product} ${qty ? s.inCart : ""}`}
+                        onClick={() => add(p.id)}
+                        aria-label={`Tambah ${p.name}, ${rupiah(p.price)}${qty ? `, ${qty} di keranjang` : ""}`}
+                      >
+                        {qty > 0 && (
+                          <span key={popped ? bump!.n : 0} className={s.badge} aria-hidden>
+                            {qty}
+                          </span>
+                        )}
+                        <span
+                          key={popped ? `e${bump!.n}` : "e"}
+                          className={`${s.emoji} ${popped ? s.pop : ""}`}
+                          style={{ background: CAT_STYLE[p.cat].bg }}
+                          aria-hidden
+                        >
+                          {p.emoji}
+                        </span>
+                        <span className={s.cat} style={{ background: CAT_STYLE[p.cat].bg, color: CAT_STYLE[p.cat].ink }}>
+                          {CAT_STYLE[p.cat].label}
+                        </span>
+                        <span className={s.name}>{p.name}</span>
+                        <span className={s.price}>{rupiah(p.price)}</span>
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
             )}
-            <button type="button" className={s.payBtn} disabled={!canPay} onClick={pay}>
-              Bayar {total > 0 ? rupiah(total) : ""}
-            </button>
-          </div>
-        </aside>
-      </div>
+          </main>
+
+          <aside className={s.cart} aria-label="Keranjang">
+            <div className={s.cartHead}>
+              <h2 className={s.cartTitle}>Pesanan</h2>
+              <span className={s.order}>#{order}</span>
+            </div>
+            {cart.length === 0 ? (
+              <div className={s.cartEmpty}>
+                <span className={s.cartEmptyIcon} aria-hidden>
+                  🛒
+                </span>
+                <span>Keranjang kosong. Ketuk menu untuk menambah.</span>
+              </div>
+            ) : (
+              <ul className={s.lines}>
+                {cart.map((l) => {
+                  const p = BY_ID.get(l.id)!;
+                  return (
+                    <li key={l.id} className={s.line}>
+                      <span className={s.lineName}>{p.name}</span>
+                      <span className={s.lineTotal}>{rupiah(p.price * l.qty)}</span>
+                      <span className={s.qty}>
+                        <button type="button" className={s.qtyBtn} aria-label={`Kurangi ${p.name}`} onClick={() => setQty(l.id, l.qty - 1)}>
+                          −
+                        </button>
+                        <span className={s.qtyN}>{l.qty}</span>
+                        <button type="button" className={s.qtyBtn} aria-label={`Tambah ${p.name}`} onClick={() => setQty(l.id, l.qty + 1)}>
+                          +
+                        </button>
+                      </span>
+                      <button type="button" className={s.remove} onClick={() => setQty(l.id, 0)}>
+                        Hapus
+                      </button>
+                    </li>
+                  );
+                })}
+              </ul>
+            )}
+
+            <div className={s.summary}>
+              <div className={s.row}>
+                <span>Subtotal</span>
+                <span>{rupiah(subtotal)}</span>
+              </div>
+              <div className={s.row}>
+                <span>PPN 11%</span>
+                <span>{rupiah(tax)}</span>
+              </div>
+              <div className={`${s.row} ${s.total}`}>
+                <span>Total</span>
+                <span>{rupiah(shownTotal)}</span>
+              </div>
+            </div>
+
+            <div className={s.pay}>
+              <div className={s.methods} role="group" aria-label="Metode bayar">
+                <button type="button" className={s.method} aria-pressed={method === "cash"} onClick={() => setMethod("cash")}>
+                  💵 Tunai
+                </button>
+                <button type="button" className={s.method} aria-pressed={method === "qris"} onClick={() => setMethod("qris")}>
+                  📱 QRIS
+                </button>
+              </div>
+              {method === "cash" && (
+                <>
+                  <div className={s.quick}>
+                    <button type="button" className={s.quickBtn} onClick={() => setCashText(String(total))} disabled={!total}>
+                      Uang pas
+                    </button>
+                    {QUICK_CASH.map((v) => (
+                      <button key={v} type="button" className={s.quickBtn} onClick={() => setCashText(String(v))}>
+                        {rupiah(v)}
+                      </button>
+                    ))}
+                  </div>
+                  <input
+                    className={s.cash}
+                    inputMode="numeric"
+                    placeholder="Uang diterima"
+                    aria-label="Uang diterima"
+                    value={cash ? cash.toLocaleString("id-ID") : ""}
+                    onChange={(e) => setCashText(e.target.value)}
+                  />
+                  {cash > 0 && total > 0 && (
+                    <div className={`${s.change} ${cash < total ? s.short : ""}`}>
+                      {cash < total ? "Kurang " : "Kembalian "}
+                      <strong>{rupiah(Math.abs(cash - total))}</strong>
+                    </div>
+                  )}
+                </>
+              )}
+              <button type="button" className={s.payBtn} disabled={!canPay} onClick={pay}>
+                Bayar {total > 0 ? rupiah(total) : ""}
+              </button>
+            </div>
+          </aside>
+        </div>
+      ) : (
+        <Dashboard role={role} onAsk={(q) => askAi(q)} />
+      )}
 
       {paid && (
         <div

@@ -2,15 +2,23 @@ export const OUTLET_ID = "kopi-tepi-01";
 
 interface MenuItem { name: string; price: number; hpp: number | null }
 
+// Same catalog as the demo cashier screen (apps/studio/app/demo/pos). Kue Lapis Titipan is a consignment
+// item without HPP, so every period has items the profit report cannot cost.
 export const MENU: readonly MenuItem[] = [
-  { name: "Kopi Susu", price: 22000, hpp: 8000 },
-  { name: "Americano", price: 18000, hpp: 5000 },
-  { name: "Latte", price: 28000, hpp: 10000 },
-  { name: "Matcha", price: 30000, hpp: 12000 },
-  { name: "Croissant", price: 25000, hpp: 11000 },
-  { name: "Nasi Goreng", price: 35000, hpp: 15000 },
-  { name: "Kue Bulan", price: 15000, hpp: null },
-  { name: "Roti Pandan", price: 12000, hpp: null },
+  { name: "Es Kopi Susu Tepi", price: 24000, hpp: 9000 },
+  { name: "Americano", price: 22000, hpp: 6000 },
+  { name: "Cappuccino", price: 28000, hpp: 10000 },
+  { name: "Kopi Tubruk", price: 15000, hpp: 4000 },
+  { name: "V60 Single Origin", price: 35000, hpp: 14000 },
+  { name: "Matcha Latte", price: 30000, hpp: 12000 },
+  { name: "Cokelat Panas", price: 26000, hpp: 10000 },
+  { name: "Es Teh Tarik", price: 18000, hpp: 6000 },
+  { name: "Lemon Tea", price: 16000, hpp: 5000 },
+  { name: "Roti Bakar Srikaya", price: 20000, hpp: 8000 },
+  { name: "Croissant Mentega", price: 25000, hpp: 11000 },
+  { name: "Pisang Goreng Keju", price: 18000, hpp: 7000 },
+  { name: "Nasi Goreng Kampung", price: 32000, hpp: 14000 },
+  { name: "Kue Lapis Titipan", price: 12000, hpp: null },
 ];
 
 export interface DayTotals {
@@ -40,15 +48,41 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+export type PaymentMethod = "cash" | "qris" | "card";
+export interface DayDetail extends DayTotals {
+  products: Record<string, { qty: number; sales: number }>;
+  payments: Record<PaymentMethod, { transactions: number; sales: number }>;
+}
+
 export function dailyTotals(outletId: string, date: string): DayTotals {
+  const { products: _p, payments: _m, ...totals } = dailyDetail(outletId, date);
+  return totals;
+}
+
+/** One item per transaction. Payment methods use their own stream so the totals stay put. */
+export function dailyDetail(outletId: string, date: string): DayDetail {
   const rand = mulberry32(hash(outletId + date));
+  const payRand = mulberry32(hash(outletId + date + "|pay"));
+  const products: DayDetail["products"] = {};
+  const payments: DayDetail["payments"] = {
+    cash: { transactions: 0, sales: 0 },
+    qris: { transactions: 0, sales: 0 },
+    card: { transactions: 0, sales: 0 },
+  };
   const transactions = 40 + Math.floor(rand() * 81); // 40..120
   let sales = 0, cogs = 0, missing = 0;
   for (let i = 0; i < transactions; i++) {
     const item = MENU[Math.floor(rand() * MENU.length)]!;
     sales += item.price;
+    const p = (products[item.name] ??= { qty: 0, sales: 0 });
+    p.qty++;
+    p.sales += item.price;
+    const r = payRand();
+    const m = payments[r < 0.4 ? "cash" : r < 0.85 ? "qris" : "card"];
+    m.transactions++;
+    m.sales += item.price;
     if (item.hpp === null) missing++;
     else cogs += item.hpp;
   }
-  return { sales, cogs, transactions, missing_cost_items: missing };
+  return { sales, cogs, transactions, missing_cost_items: missing, products, payments };
 }

@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll } from "vitest";
 import { createLocalJWKSet, jwtVerify, generateKeyPair, exportJWK } from "jose";
 import { ProfitReportSchema, JwtClaimsSchema } from "@ai/contracts";
-import { dailyTotals } from "../src/data";
+import { MENU, dailyDetail, dailyTotals } from "../src/data";
 import { buildServer } from "../src/server";
 import type { Keys } from "../src/keys";
 
@@ -69,6 +69,56 @@ describe("GET /internal/reports/profit", () => {
   });
   it("404 on unknown outlet", async () => {
     expect((await get("outlet_id=nope&from=2026-10-20&to=2026-10-26")).statusCode).toBe(404);
+  });
+});
+
+describe("menu", () => {
+  it("matches the demo cashier catalog: 14 items, one consignment item without HPP", () => {
+    expect(MENU).toHaveLength(14);
+    expect(MENU.find((m) => m.name === "Cappuccino")).toMatchObject({ price: 28000 });
+    expect(MENU.filter((m) => m.hpp === null).map((m) => m.name)).toEqual(["Kue Lapis Titipan"]);
+  });
+});
+
+describe("dailyDetail", () => {
+  it("breaks the day down by product and payment method without changing the totals", () => {
+    const d = dailyDetail("kopi-tepi-01", "2026-10-20");
+    const { products, payments, ...totals } = d;
+    expect(totals).toEqual(dailyTotals("kopi-tepi-01", "2026-10-20"));
+    expect(Object.values(products).reduce((a, p) => a + p.qty, 0)).toBe(d.transactions);
+    expect(Object.values(products).reduce((a, p) => a + p.sales, 0)).toBe(d.sales);
+    expect(Object.values(payments).reduce((a, p) => a + p.sales, 0)).toBe(d.sales);
+    expect(Object.keys(payments).sort()).toEqual(["card", "cash", "qris"]);
+  });
+});
+
+const daily = (qs: string, headers: Record<string, string> = { "x-internal-key": KEY }) =>
+  app.inject({ method: "GET", url: `/internal/reports/daily?${qs}`, headers });
+
+describe("GET /internal/reports/daily", () => {
+  it("returns one row per day plus product and payment breakdowns that add up to the profit report", async () => {
+    const res = await daily("outlet_id=kopi-tepi-01&from=2026-10-20&to=2026-10-26");
+    expect(res.statusCode).toBe(200);
+    const body = res.json();
+    const profit = (await get("outlet_id=kopi-tepi-01&from=2026-10-20&to=2026-10-26")).json();
+    expect(body.days.map((d: { date: string }) => d.date)).toEqual([20, 21, 22, 23, 24, 25, 26].map((n) => `2026-10-${n}`));
+    const sum = (k: string) => body.days.reduce((a: number, d: Record<string, number>) => a + d[k]!, 0);
+    expect(sum("sales")).toBe(profit.sales);
+    expect(sum("cogs")).toBe(profit.cogs);
+    expect(sum("profit")).toBe(profit.profit);
+    expect(sum("transactions")).toBe(profit.transactions);
+    expect(body.products.reduce((a: number, p: { qty: number }) => a + p.qty, 0)).toBe(profit.transactions);
+    const qty = body.products.map((p: { qty: number }) => p.qty);
+    expect(qty).toEqual([...qty].sort((a, b) => b - a));
+    expect(body.payments.reduce((a: number, p: { sales: number }) => a + p.sales, 0)).toBe(profit.sales);
+    expect(body).toMatchObject({ currency: "IDR", from: "2026-10-20", to: "2026-10-26", as_of: NOW.toISOString() });
+  });
+  it("401 without key, 404 unknown outlet, 400 on bad dates or more than 92 days", async () => {
+    expect((await daily("outlet_id=kopi-tepi-01&from=2026-10-20&to=2026-10-26", {})).statusCode).toBe(401);
+    expect((await daily("outlet_id=nope&from=2026-10-20&to=2026-10-26")).statusCode).toBe(404);
+    expect((await daily("outlet_id=kopi-tepi-01&from=2026-10-27&to=2026-10-01")).statusCode).toBe(400);
+    expect((await daily("outlet_id=kopi-tepi-01&from=2026-01-01&to=2026-10-26")).statusCode).toBe(400);
+    expect((await daily("outlet_id=kopi-tepi-01&from=2026-07-28&to=2026-10-27")).statusCode).toBe(200);
   });
 });
 

@@ -1,7 +1,7 @@
 import Fastify, { type FastifyInstance } from "fastify";
 import { SignJWT } from "jose";
 import { randomUUID, timingSafeEqual } from "node:crypto";
-import { OUTLET_ID, dailyTotals } from "./data";
+import { MENU, OUTLET_ID, dailyDetail, dailyTotals, type PaymentMethod } from "./data";
 import type { Keys } from "./keys";
 
 export interface ServerDeps {
@@ -11,6 +11,7 @@ export interface ServerDeps {
 }
 
 const MAX_RANGE_DAYS = 366;
+const MAX_DAILY_DAYS = 92;
 const DAY_MS = 86_400_000;
 
 function parseDate(s: unknown): number | null {
@@ -50,6 +51,48 @@ export function buildServer({ keys, internalKey, now }: ServerDeps): FastifyInst
     }
     return {
       sales, cogs, profit: sales - cogs, transactions, missing_cost_items: missing,
+      currency: "IDR", from: q.from, to: q.to, as_of: now().toISOString(),
+    };
+  });
+
+  // Dashboard feed: per-day rows plus product and payment breakdowns for the same inclusive range.
+  app.get("/internal/reports/daily", async (req, reply) => {
+    const h = req.headers["x-internal-key"];
+    if (typeof h !== "string" || !safeEqual(h, internalKey)) {
+      return reply.code(401).send({ error: "unauthorized" });
+    }
+    const q = req.query as Record<string, unknown>;
+    if (q.outlet_id !== OUTLET_ID) return reply.code(404).send({ error: "unknown outlet" });
+    const from = parseDate(q.from), to = parseDate(q.to);
+    if (from === null || to === null) return reply.code(400).send({ error: "from/to must be real YYYY-MM-DD dates" });
+    if (from > to) return reply.code(400).send({ error: "from must not be after to" });
+    if ((to - from) / DAY_MS + 1 > MAX_DAILY_DAYS) {
+      return reply.code(400).send({ error: `range exceeds ${MAX_DAILY_DAYS} days` });
+    }
+    const days = [];
+    const products = new Map(MENU.map((m) => [m.name, { name: m.name, qty: 0, sales: 0 }]));
+    const payments = new Map<PaymentMethod, { method: PaymentMethod; transactions: number; sales: number }>(
+      (["cash", "qris", "card"] as const).map((m) => [m, { method: m, transactions: 0, sales: 0 }]),
+    );
+    for (let t = from; t <= to; t += DAY_MS) {
+      const date = new Date(t).toISOString().slice(0, 10);
+      const d = dailyDetail(OUTLET_ID, date);
+      days.push({ date, sales: d.sales, cogs: d.cogs, profit: d.sales - d.cogs, transactions: d.transactions, missing_cost_items: d.missing_cost_items });
+      for (const [name, p] of Object.entries(d.products)) {
+        const row = products.get(name)!;
+        row.qty += p.qty;
+        row.sales += p.sales;
+      }
+      for (const [m, p] of Object.entries(d.payments) as [PaymentMethod, { transactions: number; sales: number }][]) {
+        const row = payments.get(m)!;
+        row.transactions += p.transactions;
+        row.sales += p.sales;
+      }
+    }
+    return {
+      days,
+      products: [...products.values()].sort((a, b) => b.qty - a.qty),
+      payments: [...payments.values()],
       currency: "IDR", from: q.from, to: q.to, as_of: now().toISOString(),
     };
   });

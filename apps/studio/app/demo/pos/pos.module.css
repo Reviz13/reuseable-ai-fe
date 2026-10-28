@@ -333,3 +333,17 @@
   .page * { animation: none !important; transition: none !important; }
   .checkCircle, .checkMark { stroke-dashoffset: 0; }
 }
+
+.views { display: flex; gap: 4px; padding: 3px; border-radius: 12px; background: #dfe5dc; }
+.view {
+  padding: 7px 14px;
+  border: 0;
+  border-radius: 9px;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 150ms ease;
+}
+.view[aria-pressed="true"] { background: var(--card); box-shadow: 0 1px 4px rgba(23, 35, 30, 0.15); }
