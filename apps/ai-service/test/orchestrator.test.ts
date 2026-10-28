@@ -183,6 +183,29 @@ describe("runChat", () => {
     expect(s.deps.pos.getProfit).not.toHaveBeenCalled();
   });
 
+  it("cashier: FORBIDDEN then model text without any figure -> FORBIDDEN copy (spec 4.5)", async () => {
+    const llm = createFakeAdapter([
+      [call({ period: "this_week" }), end("tool_use")],
+      [text(NOT_FOUND), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("cashier"), s.emit, new AbortController().signal);
+    expect(r!.text).toBe(FORBIDDEN);
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("cashier: FORBIDDEN then empty model reply -> FORBIDDEN copy, not EMPTY", async () => {
+    const llm = createFakeAdapter([
+      [call({ period: "this_week" }), end("tool_use")],
+      [end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, input("cashier"), s.emit, new AbortController().signal);
+    expect(r!.text).toBe(FORBIDDEN);
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
   it("invalid tool args -> INVALID_PERIOD tool result, run not called", async () => {
     const llm = createFakeAdapter([
       [call({ period: "kemarin lusa" }), end("tool_use")],
@@ -431,6 +454,25 @@ describe("runChat scenarios", () => {
     const r = await runChat(s.deps, input(), s.emit, new AbortController().signal);
     expect(r!.toolCalls).toEqual([{ name: "get_profit", args: { period: "today" }, ok: false, code: "UPSTREAM_ERROR" }]);
     expect(s.audits[0]).toMatchObject({ outcome: "error", error_code: "UPSTREAM_ERROR" });
+    expect(r!.avatarFinal).toBe("sad");
+  });
+
+  it("POS timeout then model text without any figure -> UPSTREAM copy (spec 4.5)", async () => {
+    const pos = createPosAdapter({
+      baseUrl: "http://pos",
+      internalKey: "k",
+      timeoutMs: 5,
+      fetch: (_u, init) =>
+        new Promise<Response>((_, rej) => init!.signal!.addEventListener("abort", () => rej(init!.signal!.reason))),
+    });
+    const llm = createFakeAdapter([
+      [call({ period: "today" }), end("tool_use")],
+      [text("Saya tidak menemukan datanya."), end()],
+    ]);
+    const s = setup({ llm });
+    s.deps.pos = pos;
+    const r = await runChat(s.deps, input(), s.emit, new AbortController().signal);
+    expect(r!.text).toBe(UPSTREAM);
     expect(r!.avatarFinal).toBe("sad");
   });
 

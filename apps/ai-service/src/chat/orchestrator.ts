@@ -199,7 +199,16 @@ export async function runChat(
     isProfitContext(input.message, toolCalls.some((t) => t.name === "get_profit")) ||
     mentionsProfit(previousUser?.content) ||
     mentionsProfit(held);
-  if (held) {
+  // Spec 4.5: a refused (FORBIDDEN) or unreachable (UPSTREAM_ERROR) profit lookup always ends with its
+  // fixed copy, whatever the model wrote after it; small models pick the wrong line or say nothing.
+  const hardFailure =
+    profitResults.length === 0 &&
+    toolCalls.some((t) => t.name === "get_profit" && (t.code === "FORBIDDEN" || t.code === "UPSTREAM_ERROR"));
+  if (hardFailure) {
+    guardrailReplaced = held.trim() !== "";
+    noDataReplaced = true;
+    emitReplacement(failureCopy(toolCalls));
+  } else if (held) {
     if (profitResults.length > 0) {
       const g = applyProfitGuardrail(held, profitResults);
       guardrailReplaced = g.replaced;
