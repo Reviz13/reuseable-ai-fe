@@ -8,6 +8,7 @@ declare module "react" {
         api?: string;
         position?: string;
         lang?: string;
+        suggestions?: string;
       };
     }
   }

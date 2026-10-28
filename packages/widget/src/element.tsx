@@ -5,8 +5,14 @@ import { Widget } from "./Widget";
 
 type Send = (text: string) => void;
 
+/** `suggestions="A | B"`: pipe separated quick questions; null keeps the built-in ones. */
+function parseSuggestions(attr: string | null): string[] | null {
+  if (attr === null) return null;
+  return attr.split("|").map((s) => s.trim()).filter(Boolean);
+}
+
 export class AiAssistantElement extends HTMLElement {
-  static observedAttributes = ["app", "api", "position", "open", "lang"];
+  static observedAttributes = ["app", "api", "position", "open", "lang", "suggestions"];
 
   /**
    * Host-provided token source. Held in memory only; never persisted.
@@ -93,6 +99,7 @@ export class AiAssistantElement extends HTMLElement {
         app={app}
         api={api}
         lang={this.getAttribute("lang")}
+        suggestions={parseSuggestions(this.getAttribute("suggestions"))}
         open={this.opened}
         corner={corner}
         getToken={() => (this.getToken ? this.getToken() : Promise.reject(new Error("getToken is not set")))}

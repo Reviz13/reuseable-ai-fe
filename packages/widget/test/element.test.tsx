@@ -365,3 +365,84 @@ describe("upgrade", () => {
     expect(Object.prototype.hasOwnProperty.call(el, "getToken")).toBe(false);
   });
 });
+
+describe("living character", () => {
+  it("an empty panel greets and offers default suggestions; a suggestion sends it", async () => {
+    chatResponses.push(() => sseResponse([{ type: "token", text: "Siap" }, DONE()]).res);
+    const el = mount();
+    await openPanel(el);
+    await waitFor(() => expect(q(el, ".welcome")!.textContent).toContain("Kopi Bot"));
+    const chips = qa(el, "button.suggest");
+    expect(chips.length).toBeGreaterThan(0);
+    const label = chips[0]!.textContent!;
+    chips[0]!.click();
+    await waitFor(() => expect(list(el).textContent).toContain("Siap"));
+    expect(chatBody(0).message).toBe(label);
+    expect(q(el, ".welcome")).toBeNull();
+  });
+
+  it("the suggestions attribute replaces the defaults", async () => {
+    const el = mount({ suggestions: "Profit hari ini? | Cara refund? |" });
+    await openPanel(el);
+    await waitFor(() =>
+      expect(qa(el, "button.suggest").map((b) => b.textContent)).toEqual(["Profit hari ini?", "Cara refund?"]),
+    );
+    el.setAttribute("suggestions", "Satu");
+    await waitFor(() => expect(qa(el, "button.suggest").map((b) => b.textContent)).toEqual(["Satu"]));
+  });
+
+  it("the header shows a large avatar and a status that follows state and tool events", async () => {
+    const s = sseResponse([], { hold: true });
+    chatResponses.push(() => s.res);
+    const el = mount();
+    await openPanel(el);
+    const status = () => q(el, ".status")!.textContent;
+    await waitFor(() => expect(status()).toBe("Siap membantu"));
+    expect(q(el, ".head .avatar")).not.toBeNull();
+    await send(el, "Profit minggu ini?");
+    s.push({ type: "state", avatar: "thinking" });
+    await waitFor(() => expect(status()).toBe("Sedang berpikir…"));
+    s.push({ type: "tool", name: "get_profit", status: "start" });
+    await waitFor(() => expect(status()).toBe("Mengecek data…"));
+    s.push({ type: "tool", name: "get_profit", status: "ok" });
+    s.push({ type: "state", avatar: "talking" });
+    await waitFor(() => expect(status()).toBe("Mengetik…"));
+    s.push(DONE());
+    s.close();
+    await waitFor(() => expect(status()).toBe("Siap membantu"));
+  });
+
+  it("shows typing dots in the empty answer bubble until the first token", async () => {
+    const s = sseResponse([], { hold: true });
+    chatResponses.push(() => s.res);
+    const el = mount();
+    await openPanel(el);
+    await send(el, "hi");
+    await waitFor(() => expect(q(el, ".msg.assistant .typing")).not.toBeNull());
+    s.push({ type: "token", text: "Halo" });
+    await waitFor(() => expect(list(el).textContent).toContain("Halo"));
+    expect(q(el, ".typing")).toBeNull();
+    s.close();
+  });
+
+  it("a greeting bubble appears beside the closed launcher and stays away once the panel was opened", async () => {
+    const el = mount();
+    await waitFor(() => expect(q(el, ".nudge")).not.toBeNull(), { timeout: 3000 });
+    expect(q(el, ".nudge")!.textContent).toContain("Halo");
+    q(el, ".nudge button.nudge-text")!.click();
+    await waitFor(() => expect(q(el, '[role="dialog"]')).not.toBeNull());
+    expect(q(el, ".nudge")).toBeNull();
+    el.close();
+    await waitFor(() => expect(q(el, '[role="dialog"]')).toBeNull());
+    await new Promise((r) => setTimeout(r, 1600));
+    expect(q(el, ".nudge")).toBeNull();
+  });
+
+  it("the greeting bubble can be dismissed", async () => {
+    const el = mount();
+    await waitFor(() => expect(q(el, ".nudge")).not.toBeNull(), { timeout: 3000 });
+    q(el, ".nudge button.nudge-close")!.click();
+    await waitFor(() => expect(q(el, ".nudge")).toBeNull());
+    expect(q(el, '[role="dialog"]')).toBeNull();
+  });
+});

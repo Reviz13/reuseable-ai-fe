@@ -8,10 +8,12 @@ export interface AvatarProps {
   state: AvatarState;
   reducedMotion: boolean;
   name: string;
+  /** Empty alt text where the name is already shown next to the avatar. */
+  decorative?: boolean;
 }
 
 /** Stacked frames. `state` is server driven; happy->idle (2000 ms) and talking<->idle (180 ms) are local. */
-export function Avatar({ frames, state, reducedMotion, name }: AvatarProps) {
+export function Avatar({ frames, state, reducedMotion, name, decorative }: AvatarProps) {
   // Tagged with the state they belong to, so a stale value never leaks into the next state.
   const [happyDone, setHappyDone] = useState<AvatarState | null>(null);
   const [tick, setTick] = useState<{ state: AvatarState; n: number }>({ state, n: 0 });
@@ -41,7 +43,7 @@ export function Avatar({ frames, state, reducedMotion, name }: AvatarProps) {
         <img
           key={s}
           src={frames[s]}
-          alt={name}
+          alt={decorative ? "" : name}
           data-state={s}
           data-active={s === shown ? "" : undefined}
           draggable={false}

@@ -8,12 +8,15 @@ import { nearestCorner, type Position } from "./position";
 
 const STATES: AvatarState[] = ["idle", "thinking", "talking", "happy", "sad"];
 const DRAG_THRESHOLD = 5;
-const LAUNCHER_SIZE = 56;
+const LAUNCHER_SIZE = 64;
+const NUDGE_DELAY_MS = 1200;
 
 export interface WidgetProps {
   app: string;
   api: string;
   lang: string | null;
+  /** Quick questions for an empty panel; null uses the built-in ones. */
+  suggestions: string[] | null;
   open: boolean;
   corner: Position;
   getToken: () => Promise<string>;
@@ -73,6 +76,10 @@ export function Widget(props: WidgetProps) {
   const [messages, setMessages] = useState<Msg[]>([]);
   const [streaming, setStreaming] = useState(false);
   const [avatar, setAvatar] = useState<AvatarState>("idle");
+  const [toolBusy, setToolBusy] = useState(false);
+  const [nudge, setNudge] = useState(false);
+  // The greeting bubble shows once per element, until the panel opens or it is dismissed.
+  const nudgeDone = useRef(open);
   const [dragPos, setDragPos] = useState<{ x: number; y: number } | null>(null);
 
   const conversationId = useRef<string | undefined>(undefined);
@@ -140,6 +147,9 @@ export function Widget(props: WidgetProps) {
               case "state":
                 setAvatar(ev.avatar);
                 break;
+              case "tool":
+                setToolBusy(ev.status === "start");
+                break;
               case "token":
                 answer += ev.text;
                 patch((m) => ({ ...m, text: answer }));
@@ -182,6 +192,7 @@ export function Widget(props: WidgetProps) {
       } finally {
         streamingRef.current = false;
         setStreaming(false);
+        setToolBusy(false);
         if (abortRef.current === ac) abortRef.current = null;
       }
     },
@@ -193,6 +204,21 @@ export function Widget(props: WidgetProps) {
     return () => props.bind(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [send]);
+
+  useEffect(() => {
+    if (open) {
+      nudgeDone.current = true;
+      setNudge(false);
+      return undefined;
+    }
+    if (nudgeDone.current) return undefined;
+    const t = setTimeout(() => setNudge(true), NUDGE_DELAY_MS);
+    return () => clearTimeout(t);
+  }, [open]);
+  const dismissNudge = () => {
+    nudgeDone.current = true;
+    setNudge(false);
+  };
 
   // Closing the panel (or unmounting) aborts the in-flight stream.
   useEffect(() => {
@@ -236,6 +262,14 @@ export function Widget(props: WidgetProps) {
     props.onOpenChange(!open);
   };
 
+  const status = !streaming
+    ? labels.ready
+    : toolBusy
+      ? labels.checking
+      : avatar === "talking"
+        ? labels.typing
+        : labels.thinking;
+
   const accent = pub && SAFE_COLOR.test(pub.theme.accent) ? pub.theme.accent : undefined;
   const rootStyle: Record<string, string> = {};
   if (accent) rootStyle["--ai-theme-accent"] = accent;
@@ -260,14 +294,30 @@ export function Widget(props: WidgetProps) {
           labels={labels}
           messages={messages}
           streaming={streaming}
+          frames={frames}
+          avatar={avatar}
+          reducedMotion={reducedMotion}
+          status={status}
+          suggestions={props.suggestions ?? labels.suggestions}
           onSend={(t) => void send(t)}
           onClose={() => props.onOpenChange(false)}
           onFeedback={feedback}
         />
       )}
+      {nudge && !open && !dragPos && (
+        <div class="nudge">
+          <button type="button" class="nudge-text" onClick={() => props.onOpenChange(true)}>
+            {labels.nudge}
+          </button>
+          <button type="button" class="nudge-close" aria-label={labels.dismiss} onClick={dismissNudge}>
+            ×
+          </button>
+        </div>
+      )}
       <button
         type="button"
         class="launcher"
+        data-state={avatar}
         aria-label={name}
         aria-expanded={open}
         onClick={onClick}
