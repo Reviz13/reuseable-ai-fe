@@ -21,7 +21,7 @@ export async function runAction(
       return {
         error:
           statusCopy[err.status] ??
-          (issues.length ? "Data tidak valid. Periksa isian di bawah." : (body?.message ?? `Permintaan gagal (${err.status}).`)),
+          (issues.length ? "Invalid data. Check the fields below." : (body?.message ?? `Request failed (${err.status}).`)),
         issues,
       };
     }

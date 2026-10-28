@@ -2,23 +2,23 @@ export const OUTLET_ID = "kopi-tepi-01";
 
 interface MenuItem { name: string; price: number; hpp: number | null }
 
-// Same catalog as the demo cashier screen (apps/studio/app/demo/pos). Kue Lapis Titipan is a consignment
+// Same catalog as the demo cashier screen (apps/studio/app/demo/pos). Consignment Layer Cake is a consignment
 // item without HPP, so every period has items the profit report cannot cost.
 export const MENU: readonly MenuItem[] = [
-  { name: "Es Kopi Susu Tepi", price: 24000, hpp: 9000 },
+  { name: "Tepi Iced Milk Coffee", price: 24000, hpp: 9000 },
   { name: "Americano", price: 22000, hpp: 6000 },
   { name: "Cappuccino", price: 28000, hpp: 10000 },
-  { name: "Kopi Tubruk", price: 15000, hpp: 4000 },
+  { name: "Tubruk Coffee", price: 15000, hpp: 4000 },
   { name: "V60 Single Origin", price: 35000, hpp: 14000 },
   { name: "Matcha Latte", price: 30000, hpp: 12000 },
-  { name: "Cokelat Panas", price: 26000, hpp: 10000 },
-  { name: "Es Teh Tarik", price: 18000, hpp: 6000 },
+  { name: "Hot Chocolate", price: 26000, hpp: 10000 },
+  { name: "Iced Teh Tarik", price: 18000, hpp: 6000 },
   { name: "Lemon Tea", price: 16000, hpp: 5000 },
-  { name: "Roti Bakar Srikaya", price: 20000, hpp: 8000 },
-  { name: "Croissant Mentega", price: 25000, hpp: 11000 },
-  { name: "Pisang Goreng Keju", price: 18000, hpp: 7000 },
-  { name: "Nasi Goreng Kampung", price: 32000, hpp: 14000 },
-  { name: "Kue Lapis Titipan", price: 12000, hpp: null },
+  { name: "Kaya Toast", price: 20000, hpp: 8000 },
+  { name: "Butter Croissant", price: 25000, hpp: 11000 },
+  { name: "Cheese Banana Fritters", price: 18000, hpp: 7000 },
+  { name: "Village Fried Rice", price: 32000, hpp: 14000 },
+  { name: "Consignment Layer Cake", price: 12000, hpp: null },
 ];
 
 export interface DayTotals {

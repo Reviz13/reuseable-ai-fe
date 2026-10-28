@@ -1,5 +1,4 @@
 import { PublicAssistantSchema, type AppId, type PublicAssistant, type SseEvent } from "@ai/contracts";
-import { GENERIC } from "./copy";
 import { parseSse } from "./sse";
 
 export type ApiErrorCode = "UNAUTHORIZED" | "RATE_LIMITED" | "BAD_REQUEST" | "NOT_FOUND" | "NETWORK" | "INTERNAL";
@@ -37,7 +36,7 @@ async function errorFrom(res: Response): Promise<ApiError> {
   if (res.status === 429) return new ApiError("RATE_LIMITED", message);
   if (res.status === 400) return new ApiError("BAD_REQUEST", message);
   if (res.status === 404) return new ApiError("NOT_FOUND", message);
-  return new ApiError("INTERNAL", message || GENERIC);
+  return new ApiError("INTERNAL", message);
 }
 
 export function createApiClient(opts: {

@@ -1,8 +1,9 @@
 /** Rupiah formatting and parsing. Independent of host ICU locale data. */
 
-export function formatRupiah(n: number): string {
+/** `Rp1.234.000`; `separator: ","` gives the English `Rp1,234,000`. */
+export function formatRupiah(n: number, separator: "." | "," = "."): string {
   const r = Math.round(Math.abs(n));
-  const grouped = String(r).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
+  const grouped = String(r).replace(/\B(?=(\d{3})+(?!\d))/g, separator);
   return `${n < 0 && r !== 0 ? "-" : ""}Rp${grouped}`;
 }
 
@@ -204,7 +205,7 @@ export function sentinelTrips(text: string): boolean {
  * kerugian, untungnya, labanya, penjualannya; plus slang and English.
  */
 export const PROFIT_WORD_RE =
-  /\b(?:ke)?(?:profit|laba|untung|rugi|omzet|omset|penjualan|pendapatan|hpp|margin|cuan|pemasukan|jualan)(?:an)?(?:nya)?\b|\b(?:sales|revenue|income)\b/i;
+  /\b(?:ke)?(?:profit|laba|untung|rugi|omzet|omset|penjualan|pendapatan|hpp|margin|cuan|pemasukan|jualan)(?:an)?(?:nya)?\b|\b(?:sales|revenue|income|cogs|earnings|turnover)\b/i;
 
 /** A profit word in `text`, checked on the normalized checking copy. */
 export function mentionsProfit(text: string | undefined): boolean {

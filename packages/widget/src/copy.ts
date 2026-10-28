@@ -8,6 +8,7 @@ export const MAX_MESSAGE_CHARS = 2000;
 
 const LABELS = {
   id: {
+    code: "id",
     placeholder: "Tulis pertanyaan…",
     send: "Kirim",
     close: "Tutup",
@@ -22,8 +23,15 @@ const LABELS = {
     nudge: "Halo! Ada yang bisa kubantu?",
     dismiss: "Tutup sapaan",
     suggestions: ["Apa saja yang bisa kamu bantu?", "Profit minggu ini?", "Bagaimana cara membuka shift?"],
+    session: SESSION,
+    rateLimited: RATE_LIMITED,
+    tooLong: TOO_LONG,
+    network: NETWORK,
+    conversationNotFound: NOT_FOUND_CONVERSATION,
+    generic: GENERIC,
   },
   en: {
+    code: "en",
     placeholder: "Ask a question…",
     send: "Send",
     close: "Close",
@@ -38,6 +46,12 @@ const LABELS = {
     nudge: "Hi! Need a hand?",
     dismiss: "Dismiss greeting",
     suggestions: ["What can you help with?", "Profit this week?", "How do I open a shift?"],
+    session: "Your session has ended, please reload the page.",
+    rateLimited: "Too many questions, please wait a moment.",
+    tooLong: "Your question is too long (maximum 2000 characters).",
+    network: "Connection problem, please try again.",
+    conversationNotFound: "Conversation not found, please send your question again.",
+    generic: "Something went wrong, please try again.",
   },
 } as const;
 export type Labels = (typeof LABELS)["id"] | (typeof LABELS)["en"];

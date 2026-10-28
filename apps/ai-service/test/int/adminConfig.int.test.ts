@@ -56,7 +56,7 @@ const putAvatar = (state: string, filename: string, buf: Buffer, ct: string) => 
 const validConfig = () => ({
   name: "Kopi Bot",
   persona_prompt: "SECRET-PERSONA-TEXT ramah dan singkat",
-  language: "id",
+  language: "en",
   llm_adapter: "claude" as const,
   llm_model: "claude-sonnet-5-5",
   fallback_adapter: null,

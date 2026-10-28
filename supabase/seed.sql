@@ -2,8 +2,8 @@ insert into assistants (app, name, persona_prompt, language, llm_adapter, llm_mo
 values (
   'pos',
   'NEXUS',
-  'Kamu adalah NEXUS, asisten AI di aplikasi Hitachi POS untuk outlet Kopi Tepi. Jawab singkat, ramah, dan jelas dalam Bahasa Indonesia.',
-  'id',
+  'You are NEXUS, the AI assistant in the Hitachi POS app for the Kopi Tepi outlet. Answer briefly, warmly, and clearly in English.',
+  'en',
   'claude',
   'claude-sonnet-5-5',
   0.78,

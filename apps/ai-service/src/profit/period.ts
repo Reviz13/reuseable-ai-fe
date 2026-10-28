@@ -1,5 +1,6 @@
 import { TZDate } from "@date-fns/tz";
 import type { GetProfitArgs, Tz } from "@ai/contracts";
+import { copyFor, type Copy } from "../copy.js";
 
 export type ResolvedPeriod = { from: string; to: string; label: string };
 export type PeriodError = { error: string };
@@ -20,31 +21,36 @@ function parseStrict(s: string): Date | null {
 }
 
 /** Resolve a profit period to local calendar dates in `tz`. Weeks start on Monday. */
-export function resolvePeriod(args: GetProfitArgs, tz: Tz, now: Date): ResolvedPeriod | PeriodError {
+export function resolvePeriod(
+  args: GetProfitArgs,
+  tz: Tz,
+  now: Date,
+  copy: Copy = copyFor("id"),
+): ResolvedPeriod | PeriodError {
   const local = new TZDate(now, tz);
   const today = utc(local.getFullYear(), local.getMonth(), local.getDate());
   const ymd = (from: Date, to: Date, label: string): ResolvedPeriod => ({ from: fmt(from), to: fmt(to), label });
 
   switch (args.period) {
     case "today":
-      return ymd(today, today, "hari ini");
+      return ymd(today, today, copy.period.today);
     case "yesterday": {
       const y = addDays(today, -1);
-      return ymd(y, y, "kemarin");
+      return ymd(y, y, copy.period.yesterday);
     }
     case "this_week": {
       const offset = (today.getUTCDay() + 6) % 7; // Monday = 0
-      return ymd(addDays(today, -offset), today, "minggu ini");
+      return ymd(addDays(today, -offset), today, copy.period.this_week);
     }
     case "last_week": {
       const monday = addDays(today, -((today.getUTCDay() + 6) % 7));
-      return ymd(addDays(monday, -7), addDays(monday, -1), "minggu lalu");
+      return ymd(addDays(monday, -7), addDays(monday, -1), copy.period.last_week);
     }
     case "this_month":
-      return ymd(utc(today.getUTCFullYear(), today.getUTCMonth(), 1), today, "bulan ini");
+      return ymd(utc(today.getUTCFullYear(), today.getUTCMonth(), 1), today, copy.period.this_month);
     case "last_month": {
       const first = utc(today.getUTCFullYear(), today.getUTCMonth(), 1);
-      return ymd(utc(first.getUTCFullYear(), first.getUTCMonth() - 1, 1), addDays(first, -1), "bulan lalu");
+      return ymd(utc(first.getUTCFullYear(), first.getUTCMonth() - 1, 1), addDays(first, -1), copy.period.last_month);
     }
     case "custom": {
       if (!args.start_date || !args.end_date) return { error: "start_date dan end_date wajib diisi" };
@@ -55,7 +61,7 @@ export function resolvePeriod(args: GetProfitArgs, tz: Tz, now: Date): ResolvedP
       if (e > today) return { error: "tanggal akhir tidak boleh di masa depan" };
       const days = Math.round((e.getTime() - s.getTime()) / DAY_MS) + 1;
       if (days > MAX_DAYS) return { error: `rentang maksimal ${MAX_DAYS} hari` };
-      return ymd(s, e, `${fmt(s)} s.d. ${fmt(e)}`);
+      return ymd(s, e, copy.customPeriod(fmt(s), fmt(e)));
     }
   }
 }

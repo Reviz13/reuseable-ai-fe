@@ -5,7 +5,7 @@ export const metadata: Metadata = { title: "AI Studio" };
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
-    <html lang="id">
+    <html lang="en">
       <body>{children}</body>
     </html>
   );

@@ -20,19 +20,19 @@ export default async function DocumentPage({ params }: { params: Promise<{ app: 
   return (
     <>
       <p>
-        <Link href={`/admin/${app}/knowledge`}>&larr; Kembali</Link>
+        <Link href={`/admin/${app}/knowledge`}>&larr; Back</Link>
       </p>
       <h1>{doc.title}</h1>
       <p className="muted">
-        {doc.kind} · <span className={`badge ${doc.status}`}>{doc.status}</span> · versi aktif: {doc.active_version ?? "-"}
+        {doc.kind} · <span className={`badge ${doc.status}`}>{doc.status}</span> · active version: {doc.active_version ?? "-"}
       </p>
       <section className="card table-wrap">
-        <h2>Riwayat versi</h2>
+        <h2>Version history</h2>
         <table>
           <thead>
             <tr>
-              <th>Versi</th>
-              <th>Dibuat</th>
+              <th>Version</th>
+              <th>Created</th>
               <th>Chunk</th>
               <th>Error</th>
               <th />
@@ -43,9 +43,9 @@ export default async function DocumentPage({ params }: { params: Promise<{ app: 
               <tr key={v.id}>
                 <td>
                   {v.version}
-                  {v.id === doc.active_version_id && " (aktif)"}
+                  {v.id === doc.active_version_id && " (active)"}
                 </td>
-                <td>{new Date(v.created_at).toLocaleString("id-ID")}</td>
+                <td>{new Date(v.created_at).toLocaleString("en-GB")}</td>
                 <td>{v.chunk_count}</td>
                 <td className={v.error ? "error" : undefined}>{v.error ?? "-"}</td>
                 <td>
@@ -64,7 +64,7 @@ export default async function DocumentPage({ params }: { params: Promise<{ app: 
       )}
       {doc.kind === "file" && (
         <section className="card">
-          <h2>Versi baru</h2>
+          <h2>New version</h2>
           <UploadForm app={app} documentId={doc.id} />
         </section>
       )}

@@ -19,7 +19,7 @@ export function ActivateButton({ app, documentId, versionId }: { app: string; do
           })
         }
       >
-        Aktifkan
+        Activate
       </button>
       {state.error && (
         <div className="error" role="alert">
@@ -38,13 +38,13 @@ export function DeleteButton({ app, documentId }: { app: string; documentId: str
       className="danger"
       disabled={pending}
       onClick={() => {
-        if (!window.confirm("Hapus dokumen ini dari basis pengetahuan? Versi lama tetap disimpan untuk audit.")) return;
+        if (!window.confirm("Delete this document from the knowledge base? Old versions are kept for audit.")) return;
         start(async () => {
           await deleteDocument(app, documentId);
         });
       }}
     >
-      Hapus
+      Delete
     </button>
   );
 }

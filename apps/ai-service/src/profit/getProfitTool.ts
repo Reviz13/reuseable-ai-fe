@@ -1,5 +1,5 @@
 import { GetProfitArgsSchema, type GetProfitArgs, type ProfitReport, type ToolResult } from "@ai/contracts";
-import { FORBIDDEN, UPSTREAM } from "../copy.js";
+import { copyFor } from "../copy.js";
 import type { ToolCtx, ToolDef } from "../tools/types.js";
 import { resolvePeriod } from "./period.js";
 import { UpstreamError } from "./posAdapter.js";
@@ -9,6 +9,7 @@ type Data = { report: ProfitReport; label: string };
 async function run(args: GetProfitArgs, ctx: ToolCtx): Promise<ToolResult<Data>> {
   const started = Date.now();
   const { claims } = ctx;
+  const copy = ctx.copy ?? copyFor("id");
   let from: string | null = null;
   let to: string | null = null;
 
@@ -27,10 +28,10 @@ async function run(args: GetProfitArgs, ctx: ToolCtx): Promise<ToolResult<Data>>
 
   if (claims.role !== "owner") {
     await audit("forbidden", "FORBIDDEN");
-    return { ok: false, code: "FORBIDDEN", message: FORBIDDEN };
+    return { ok: false, code: "FORBIDDEN", message: copy.FORBIDDEN };
   }
 
-  const period = resolvePeriod(args, claims.tz, ctx.now);
+  const period = resolvePeriod(args, claims.tz, ctx.now, copy);
   if ("error" in period) {
     await audit("error", "INVALID_PERIOD");
     return { ok: false, code: "INVALID_PERIOD", message: period.error };
@@ -49,14 +50,14 @@ async function run(args: GetProfitArgs, ctx: ToolCtx): Promise<ToolResult<Data>>
     }
     if (!(err instanceof UpstreamError)) throw err; // bugs propagate
     await audit("error", "UPSTREAM_ERROR");
-    return { ok: false, code: "UPSTREAM_ERROR", message: UPSTREAM };
+    return { ok: false, code: "UPSTREAM_ERROR", message: copy.UPSTREAM };
   }
 }
 
 export const getProfitTool: ToolDef<GetProfitArgs, Data> = {
   name: "get_profit",
   description:
-    "Ambil profit outlet untuk periode tertentu (hari ini, kemarin, minggu ini/lalu, bulan ini/lalu, atau rentang custom). Hanya untuk owner.",
+    "Get the outlet's profit, sales and COGS for a period: today, yesterday, this/last week, this/last month, or custom with start_date and end_date (YYYY-MM-DD; a single day has the same start and end). Owner only.",
   schema: GetProfitArgsSchema,
   run,
 };

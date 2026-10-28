@@ -14,18 +14,18 @@ export default async function KnowledgePage({ params }: { params: Promise<{ app:
   return (
     <>
       <AutoRefresh active={processing} />
-      <h1>Pengetahuan</h1>
+      <h1>Knowledge</h1>
       <div className="card table-wrap">
         {docs.length === 0 ? (
-          <p className="muted">Belum ada dokumen.</p>
+          <p className="muted">No documents yet.</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Judul</th>
-                <th>Jenis</th>
+                <th>Title</th>
+                <th>Type</th>
                 <th>Status</th>
-                <th>Versi aktif</th>
+                <th>Active version</th>
               </tr>
             </thead>
             <tbody>
@@ -47,11 +47,11 @@ export default async function KnowledgePage({ params }: { params: Promise<{ app:
       </div>
       <div className="grid2">
         <section className="card">
-          <h2>Unggah dokumen</h2>
+          <h2>Upload a document</h2>
           <UploadForm app={app} />
         </section>
         <section className="card">
-          <h2>Tambah FAQ</h2>
+          <h2>Add FAQ</h2>
           <FaqForm app={app} />
         </section>
       </div>

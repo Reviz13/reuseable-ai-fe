@@ -8,7 +8,7 @@ export const dynamic = "force-dynamic";
 
 type SP = Record<string, string | string[] | undefined>;
 const one = (v: string | string[] | undefined) => (Array.isArray(v) ? v[0] : v) ?? "";
-const fmt = (s: string) => new Date(s).toLocaleString("id-ID");
+const fmt = (s: string) => new Date(s).toLocaleString("en-GB");
 
 export default async function InsightsPage({
   params,
@@ -24,11 +24,11 @@ export default async function InsightsPage({
 
   return (
     <>
-      <h1>Insight</h1>
+      <h1>Insights</h1>
       <nav className="tabs">
         {[
-          ["gaps", "Celah pengetahuan"],
-          ["feedback", "Umpan balik"],
+          ["gaps", "Knowledge gaps"],
+          ["feedback", "Feedback"],
           ["audit", "Audit"],
         ].map(([key, label]) => (
           <Link key={key} href={`${base}?tab=${key}`} className={tab === key ? "active" : undefined}>
@@ -48,17 +48,17 @@ async function Gaps({ app, resolved, base }: { app: "pos" | "banking" | "erp"; r
   return (
     <section className="card table-wrap">
       <p>
-        <Link href={`${base}?tab=gaps`}>Belum selesai</Link> · <Link href={`${base}?tab=gaps&resolved=true`}>Selesai</Link>
+        <Link href={`${base}?tab=gaps`}>Open</Link> · <Link href={`${base}?tab=gaps&resolved=true`}>Resolved</Link>
       </p>
       {gaps.length === 0 ? (
-        <p className="muted">Tidak ada data.</p>
+        <p className="muted">No data.</p>
       ) : (
         <table>
           <thead>
             <tr>
-              <th>Pertanyaan</th>
-              <th>Skor tertinggi</th>
-              <th>Waktu</th>
+              <th>Question</th>
+              <th>Top score</th>
+              <th>Time</th>
               <th />
             </tr>
           </thead>
@@ -73,7 +73,7 @@ async function Gaps({ app, resolved, base }: { app: "pos" | "banking" | "erp"; r
                     <form action={resolveGap.bind(null, app)}>
                       <input type="hidden" name="id" value={g.id} />
                       <button type="submit" className="secondary">
-                        Tandai selesai
+                        Mark resolved
                       </button>
                     </form>
                   )}
@@ -91,17 +91,17 @@ async function Feedback({ app }: { app: "pos" | "banking" | "erp" }) {
   const items = await aiAdmin(`/admin/${app}/feedback?rating=-1`, { schema: FeedbackSchema });
   return (
     <section>
-      {items.length === 0 && <p className="card muted">Belum ada umpan balik negatif.</p>}
+      {items.length === 0 && <p className="card muted">No negative feedback yet.</p>}
       {items.map((f) => (
         <article className="card" key={f.message_id}>
           <p>
-            <strong>Pertanyaan:</strong> {f.question ?? "-"}
+            <strong>Question:</strong> {f.question ?? "-"}
           </p>
           <p>
-            <strong>Jawaban:</strong> {f.answer}
+            <strong>Answer:</strong> {f.answer}
           </p>
           <p>
-            <strong>Komentar:</strong> {f.comment ?? "-"}
+            <strong>Comment:</strong> {f.comment ?? "-"}
           </p>
           <p className="muted">{fmt(f.created_at)}</p>
         </article>
@@ -119,40 +119,40 @@ async function Audit({ app, sp, base }: { app: "pos" | "banking" | "erp"; sp: SP
       <form method="get" action={base} className="card row">
         <input type="hidden" name="tab" value="audit" />
         <div>
-          <label htmlFor="action">Aksi</label>
+          <label htmlFor="action">Action</label>
           <input id="action" name="action" type="text" defaultValue={one(sp.action)} placeholder="doc.upload" />
         </div>
         <div>
-          <label htmlFor="outcome">Hasil</label>
+          <label htmlFor="outcome">Outcome</label>
           <select id="outcome" name="outcome" defaultValue={one(sp.outcome)}>
-            <option value="">Semua</option>
+            <option value="">All</option>
             <option value="ok">ok</option>
             <option value="forbidden">forbidden</option>
             <option value="error">error</option>
           </select>
         </div>
         <div>
-          <label htmlFor="from">Dari</label>
+          <label htmlFor="from">From</label>
           <input id="from" name="from" type="date" defaultValue={one(sp.from)} />
         </div>
         <div>
-          <label htmlFor="to">Sampai</label>
+          <label htmlFor="to">To</label>
           <input id="to" name="to" type="date" defaultValue={one(sp.to)} />
         </div>
         <button type="submit">Filter</button>
       </form>
       <section className="card table-wrap">
         {rows.length === 0 ? (
-          <p className="muted">Tidak ada data.</p>
+          <p className="muted">No data.</p>
         ) : (
           <table>
             <thead>
               <tr>
-                <th>Waktu</th>
-                <th>Pelaku</th>
-                <th>Aksi</th>
-                <th>Hasil</th>
-                <th>Parameter</th>
+                <th>Time</th>
+                <th>Actor</th>
+                <th>Action</th>
+                <th>Outcome</th>
+                <th>Parameters</th>
               </tr>
             </thead>
             <tbody>

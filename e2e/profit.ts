@@ -4,7 +4,7 @@ import { resolve } from "node:path";
 export const E2E_INTERNAL_KEY = process.env.E2E_EXTERNAL === "1" ? (process.env.INTERNAL_KEY ?? "dev") : "e2e";
 export const MOCK_POS = "http://localhost:4100";
 export const OUTLET_ID = "kopi-tepi-01";
-export const PROFIT_QUESTION = "Profit minggu ini?";
+export const PROFIT_QUESTION = "Profit this week?";
 export const FAKE_SCRIPT_PATH = resolve(__dirname, "fake-script.json");
 
 const pad = (n: number) => String(n).padStart(2, "0");

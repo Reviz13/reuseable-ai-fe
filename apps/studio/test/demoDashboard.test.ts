@@ -82,4 +82,39 @@ describe("GET /api/demo-dashboard", () => {
     vi.stubEnv("NODE_ENV", "production");
     expect((await GET(req("role=owner&range=7d"))).status).toBe(404);
   });
+
+  it("custom: a single day compares with the day before", async () => {
+    const res = await GET(req("role=owner&range=custom&from=2026-09-30&to=2026-09-30"));
+    expect(res.status).toBe(200);
+    const urls = fetchMock.mock.calls.map((c) => new URL(c[0] as string));
+    expect(urls.map((u) => [u.searchParams.get("from"), u.searchParams.get("to")])).toEqual([
+      ["2026-09-30", "2026-09-30"],
+      ["2026-09-29", "2026-09-29"],
+    ]);
+    expect((await res.json()).from).toBe("2026-09-30");
+  });
+
+  it("custom: a range compares with the same number of days just before it", async () => {
+    await GET(req("role=owner&range=custom&from=2026-10-01&to=2026-10-15"));
+    const urls = fetchMock.mock.calls.map((c) => new URL(c[0] as string));
+    expect(urls.map((u) => [u.searchParams.get("from"), u.searchParams.get("to")])).toEqual([
+      ["2026-10-01", "2026-10-15"],
+      ["2026-09-16", "2026-09-30"],
+    ]);
+  });
+
+  it("custom: 400 on missing or impossible dates, reversed, future or over 92 days", async () => {
+    for (const qs of [
+      "from=2026-09-30",
+      "from=2026-02-30&to=2026-03-01",
+      "from=2026-10-10&to=2026-10-01",
+      "from=2026-10-29&to=2026-10-30",
+      "from=2026-01-01&to=2026-10-01",
+    ]) {
+      expect((await GET(req("role=owner&range=custom&" + qs))).status).toBe(400);
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+    // Jakarta today (2026-10-29) is allowed even though it is still the 28th in UTC.
+    expect((await GET(req("role=owner&range=custom&from=2026-10-29&to=2026-10-29"))).status).toBe(200);
+  });
 });

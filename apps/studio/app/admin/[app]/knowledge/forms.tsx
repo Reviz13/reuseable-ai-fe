@@ -24,12 +24,12 @@ export function UploadForm({ app, documentId }: { app: string; documentId?: stri
   return (
     <form action={action}>
       {documentId && <input type="hidden" name="document_id" value={documentId} />}
-      <label htmlFor="file">{documentId ? "Unggah versi baru" : "Unggah berkas (PDF, DOCX, MD, TXT)"}</label>
+      <label htmlFor="file">{documentId ? "Upload a new version" : "Upload a file (PDF, DOCX, MD, TXT)"}</label>
       <input id="file" name="file" type="file" accept=".pdf,.docx,.md,.txt" required />
       <FormMessages state={state} />
       <p>
         <button type="submit" disabled={pending}>
-          {pending ? "Mengunggah..." : "Unggah"}
+          {pending ? "Uploading..." : "Upload"}
         </button>
       </p>
     </form>
@@ -40,16 +40,16 @@ export function FaqForm({ app }: { app: string }) {
   const [state, action, pending] = useActionState(addFaq.bind(null, app), EMPTY);
   return (
     <form action={action} key={state.ok ? "done" : "form"}>
-      <label htmlFor="question">Pertanyaan</label>
+      <label htmlFor="question">Question</label>
       <input id="question" name="question" type="text" required maxLength={500} />
       <FieldIssues state={state} field="question" />
-      <label htmlFor="answer">Jawaban</label>
+      <label htmlFor="answer">Answer</label>
       <textarea id="answer" name="answer" required maxLength={5000} />
       <FieldIssues state={state} field="answer" />
       <FormMessages state={state} />
       <p>
         <button type="submit" disabled={pending}>
-          {pending ? "Menyimpan..." : "Tambah FAQ"}
+          {pending ? "Saving..." : "Add FAQ"}
         </button>
       </p>
     </form>
@@ -68,16 +68,16 @@ export function EditFaqForm({
   const [state, action, pending] = useActionState(updateFaq.bind(null, app, documentId), EMPTY);
   return (
     <form action={action}>
-      <label htmlFor="question">Pertanyaan</label>
+      <label htmlFor="question">Question</label>
       <input id="question" name="question" type="text" required maxLength={500} defaultValue={faq.question} />
       <FieldIssues state={state} field="question" />
-      <label htmlFor="answer">Jawaban</label>
+      <label htmlFor="answer">Answer</label>
       <textarea id="answer" name="answer" required maxLength={5000} defaultValue={faq.answer} />
       <FieldIssues state={state} field="answer" />
       <FormMessages state={state} />
       <p>
         <button type="submit" disabled={pending}>
-          {pending ? "Menyimpan..." : "Simpan perubahan"}
+          {pending ? "Saving..." : "Save changes"}
         </button>
       </p>
     </form>

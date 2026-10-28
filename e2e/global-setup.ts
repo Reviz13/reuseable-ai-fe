@@ -8,7 +8,7 @@ import { FAKE_SCRIPT_PATH, PROFIT_QUESTION, fetchThisWeekProfit, formatRupiah } 
  * (src/llm/fake.ts). Keyed on the message, round = tool-call rounds so far in that turn, so replay does
  * not depend on request order across the owner and cashier turns.
  *
- * "Profit minggu ini?" (both roles):
+ * "Profit this week?" (both roles):
  *   round 1: get_profit {period:"this_week"}
  *   round 2: text with the exact profit mock-pos reports right now.
  * Owner: the guardrail sees a matching get_profit result and lets the text through.
@@ -29,7 +29,7 @@ export default async function globalSetup(): Promise<void> {
           { type: "end", stop: "tool_use" },
         ],
         [
-          { type: "text", text: `Profit minggu ini adalah ${formatRupiah(profit)} (periode ${from} s.d. ${to}).` },
+          { type: "text", text: `This week's profit is ${formatRupiah(profit)} (from ${from} to ${to}).` },
           { type: "end", stop: "end_turn" },
         ],
       ],

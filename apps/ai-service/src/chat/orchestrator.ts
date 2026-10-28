@@ -1,6 +1,6 @@
 import type { AppId, AvatarState, JwtClaims, SseEvent } from "@ai/contracts";
 import type { AuditWriter } from "../audit.js";
-import { EMPTY, FORBIDDEN, NO_DATA, NOT_FOUND, UPSTREAM } from "../copy.js";
+import { copyFor, type Copy } from "../copy.js";
 import type { AdapterName } from "../llm/gateway.js";
 import type { LlmAdapter, LlmMessage, LlmToolCall } from "../llm/types.js";
 import { isProfitContext, mentionsCurrency, mentionsProfit, parseGuardrailAmounts } from "../money.js";
@@ -105,11 +105,16 @@ function knowledgeAmounts(chunks: RetrievedChunk[]): Set<number> {
   return values;
 }
 
-function failureCopy(toolCalls: ToolCallRecord[]): string {
+/** The user's calendar date in their time zone, YYYY-MM-DD. */
+function localDate(now: Date, tz: string): string {
+  return new Intl.DateTimeFormat("en-CA", { timeZone: tz, year: "numeric", month: "2-digit", day: "2-digit" }).format(now);
+}
+
+function failureCopy(toolCalls: ToolCallRecord[], copy: Copy): string {
   const codes = toolCalls.filter((t) => t.name === "get_profit" && !t.ok).map((t) => t.code);
-  if (codes.includes("FORBIDDEN")) return FORBIDDEN;
-  if (codes.includes("UPSTREAM_ERROR")) return UPSTREAM;
-  return NO_DATA;
+  if (codes.includes("FORBIDDEN")) return copy.FORBIDDEN;
+  if (codes.includes("UPSTREAM_ERROR")) return copy.UPSTREAM;
+  return copy.NO_DATA;
 }
 
 /**
@@ -148,7 +153,11 @@ export async function runChat(
   const relevant = retrieved.filter((c) => c.score >= assistant.min_score);
 
   const tools = deps.tools ?? toolsFor(assistant.app);
-  const system = buildSystemPrompt(assistant, relevant, relevant.length > 0);
+  const copy = copyFor(assistant.language);
+  const system = buildSystemPrompt(assistant, relevant, relevant.length > 0, {
+    date: localDate(deps.now(), claims.tz),
+    tz: claims.tz,
+  });
   const messages: LlmMessage[] = normalizeHistory([
     ...(input.history as { role: "user" | "assistant"; content: string }[]),
     { role: "user", content: input.message },
@@ -186,7 +195,7 @@ export async function runChat(
 
       messages.push({ role: "assistant", tool_calls: calls });
       for (const call of calls) {
-        const result = await runTool(deps, tools, call, claims, signal, emit, setState);
+        const result = await runTool(deps, tools, call, claims, signal, emit, setState, copy);
         if (result === null) return null;
         toolCalls.push({
           name: call.name,
@@ -221,10 +230,10 @@ export async function runChat(
   if (hardFailure) {
     guardrailReplaced = held.trim() !== "";
     noDataReplaced = true;
-    emitReplacement(failureCopy(toolCalls));
+    emitReplacement(failureCopy(toolCalls, copy));
   } else if (held) {
     if (profitResults.length > 0) {
-      const g = applyProfitGuardrail(held, profitResults);
+      const g = applyProfitGuardrail(held, profitResults, undefined, copy);
       guardrailReplaced = g.replaced;
       if (g.replaced) emitReplacement(g.text);
       else emitText(g.text);
@@ -235,16 +244,16 @@ export async function runChat(
       const known = !profitContext && toolCalls.length === 0 ? knowledgeAmounts(relevant) : new Set<number>();
       if (amounts.some((a) => !known.has(a.value))) {
         guardrailReplaced = noDataReplaced = true;
-        emitReplacement(failureCopy(toolCalls));
+        emitReplacement(failureCopy(toolCalls, copy));
       } else {
         emitText(held);
       }
     }
   }
   const empty = text.trim() === "";
-  if (empty) emitReplacement(EMPTY);
+  if (empty) emitReplacement(copy.EMPTY);
 
-  const notFound = text.includes(NOT_FOUND);
+  const notFound = text.includes(copy.NOT_FOUND);
   const citations = toolCalls.length === 0 && !notFound ? citationsFrom(relevant) : [];
   for (const c of citations) emit({ type: "citation", ...c });
 
@@ -269,6 +278,7 @@ async function runTool(
   signal: AbortSignal,
   emit: (e: SseEvent) => void,
   setState: (s: AvatarState) => void,
+  copy: Copy,
 ): Promise<ToolOutcome | null> {
   setState("thinking");
   emit({ type: "tool", name: call.name, status: "start" });
@@ -293,7 +303,7 @@ async function runTool(
       result = { ok: false, code: "INVALID_PERIOD", message: INVALID_ARGS_MSG };
     } else {
       try {
-        result = await tool.run(args.data, { claims, now: deps.now(), signal, audit: deps.audit, pos: deps.pos });
+        result = await tool.run(args.data, { claims, now: deps.now(), signal, audit: deps.audit, pos: deps.pos, copy });
       } catch (err) {
         if (isAbort(err, signal)) return null;
         throw err;

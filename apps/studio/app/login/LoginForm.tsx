@@ -21,13 +21,13 @@ export function LoginForm({ supabaseUrl, anonKey }: { supabaseUrl: string; anonK
         password: String(form.get("password") ?? ""),
       });
       if (error) {
-        setError("Email atau kata sandi salah.");
+        setError("Incorrect email or password.");
         return;
       }
       router.push("/admin/pos/knowledge");
       router.refresh();
     } catch {
-      setError("Tidak dapat masuk saat ini. Coba lagi.");
+      setError("Unable to sign in right now. Try again.");
     } finally {
       setBusy(false);
     }
@@ -35,11 +35,11 @@ export function LoginForm({ supabaseUrl, anonKey }: { supabaseUrl: string; anonK
 
   return (
     <main className="login card">
-      <h1>Masuk ke AI Studio</h1>
+      <h1>Sign in to AI Studio</h1>
       <form onSubmit={onSubmit}>
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" required autoComplete="username" />
-        <label htmlFor="password">Kata sandi</label>
+        <label htmlFor="password">Password</label>
         <input id="password" name="password" type="password" required autoComplete="current-password" />
         {error && (
           <p className="error" role="alert">
@@ -48,7 +48,7 @@ export function LoginForm({ supabaseUrl, anonKey }: { supabaseUrl: string; anonK
         )}
         <p>
           <button type="submit" disabled={busy}>
-            {busy ? "Memproses..." : "Masuk"}
+            {busy ? "Signing in..." : "Sign in"}
           </button>
         </p>
       </form>

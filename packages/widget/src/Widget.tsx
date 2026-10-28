@@ -2,7 +2,7 @@ import type { AvatarState, PublicAssistant } from "@ai/contracts";
 import { useCallback, useEffect, useMemo, useRef, useState } from "preact/hooks";
 import { ApiError, createApiClient, isAbort } from "./api";
 import { Avatar } from "./Avatar";
-import { GENERIC, labelsFor, MAX_MESSAGE_CHARS, NETWORK, NOT_FOUND_CONVERSATION, RATE_LIMITED, SESSION, TOO_LONG } from "./copy";
+import { labelsFor, MAX_MESSAGE_CHARS, type Labels } from "./copy";
 import { Panel, type Msg } from "./Panel";
 import { nearestCorner, type Position } from "./position";
 
@@ -50,18 +50,23 @@ function useReducedMotion(): boolean {
   return reduced;
 }
 
-function errorText(code: string, message: string): string {
+/**
+ * Widget copy in the widget's language. Server messages are used only where the server localizes them
+ * (SSE errors follow the assistant's language); the pre-assistant 429 text is Indonesian, so English
+ * widgets use their own line.
+ */
+function errorText(code: string, message: string, labels: Labels): string {
   switch (code) {
     case "UNAUTHORIZED":
-      return SESSION;
+      return labels.session;
     case "RATE_LIMITED":
-      return message || RATE_LIMITED;
+      return (labels.code === "id" && message) || labels.rateLimited;
     case "NETWORK":
-      return NETWORK;
+      return labels.network;
     case "NOT_FOUND":
-      return NOT_FOUND_CONVERSATION;
+      return labels.conversationNotFound;
     default:
-      return message || GENERIC;
+      return message || labels.generic;
   }
 }
 
@@ -70,6 +75,8 @@ const SAFE_COLOR = /^#[0-9a-f]{3,8}$/i;
 export function Widget(props: WidgetProps) {
   const { app, api, open, corner } = props;
   const labels = labelsFor(props.lang);
+  const latestLabels = useRef(labels);
+  latestLabels.current = labels;
   const reducedMotion = useReducedMotion();
 
   const [pub, setPub] = useState<PublicAssistant | null>(null);
@@ -119,7 +126,7 @@ export function Widget(props: WidgetProps) {
       const patch = (fn: (m: Msg) => Msg) => setMessages((ms) => ms.map((m) => (m.id === asstId ? fn(m) : m)));
       const fail = (code: string, message: string) => {
         setAvatar("sad");
-        patch((m) => ({ ...m, error: errorText(code, message) }));
+        patch((m) => ({ ...m, error: errorText(code, message, latestLabels.current) }));
         latest.current.onError({ code });
       };
 
@@ -129,7 +136,7 @@ export function Widget(props: WidgetProps) {
         { id: asstId, role: "assistant", text: "", citations: [] },
       ]);
       if (text.length > MAX_MESSAGE_CHARS) {
-        fail("BAD_REQUEST", TOO_LONG);
+        fail("BAD_REQUEST", latestLabels.current.tooLong);
         return;
       }
 

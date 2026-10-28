@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from "react";
 import s from "./dashboard.module.css";
 
-type Range = "today" | "7d" | "30d";
+type Preset = "today" | "7d" | "30d";
+type Range = Preset | "custom";
 type Totals = { sales: number; cogs: number; profit: number; transactions: number; missing_cost_items: number };
 type Day = Totals & { date: string };
 type Data = {
@@ -16,25 +17,47 @@ type Data = {
   totals: Totals;
   previous: Totals;
 };
+/** What is on screen: a preset, or a custom From-To (a single day when equal). */
+type Selection = { range: Preset } | { range: "custom"; from: string; to: string };
 
-const RANGES: { id: Range; label: string; prev: string; ask: string }[] = [
-  { id: "today", label: "Hari ini", prev: "kemarin", ask: "Profit hari ini?" },
-  { id: "7d", label: "7 hari", prev: "7 hari sebelumnya", ask: "Profit minggu ini?" },
-  { id: "30d", label: "30 hari", prev: "30 hari sebelumnya", ask: "Profit bulan ini?" },
+const PRESETS: { id: Preset; label: string; prev: string }[] = [
+  { id: "today", label: "Today", prev: "yesterday" },
+  { id: "7d", label: "7 days", prev: "previous 7 days" },
+  { id: "30d", label: "30 days", prev: "previous 30 days" },
 ];
-const METHOD_LABEL = { cash: "Tunai", qris: "QRIS", card: "Kartu" } as const;
+const METHOD_LABEL = { cash: "Cash", qris: "QRIS", card: "Card" } as const;
+const MAX_DAYS = 92;
+const DAY_MS = 86_400_000;
 
-const rupiah = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
+const rupiah = (n: number) => "Rp" + Math.round(n).toLocaleString("en-US");
 function compact(n: number): string {
-  if (n >= 1e9) return `Rp${(n / 1e9).toLocaleString("id-ID", { maximumFractionDigits: 1 })} M`;
-  if (n >= 1e6) return `Rp${(n / 1e6).toLocaleString("id-ID", { maximumFractionDigits: 2 })} jt`;
-  if (n >= 1e3) return `Rp${Math.round(n / 1e3)} rb`;
+  if (n >= 1e9) return `Rp${(n / 1e9).toLocaleString("en-US", { maximumFractionDigits: 1 })}B`;
+  if (n >= 1e6) return `Rp${(n / 1e6).toLocaleString("en-US", { maximumFractionDigits: 2 })}M`;
+  if (n >= 1e3) return `Rp${Math.round(n / 1e3)}K`;
   return rupiah(n);
 }
-const shortDate = (iso: string) =>
-  new Date(iso + "T00:00:00Z").toLocaleDateString("id-ID", { day: "numeric", month: "short", timeZone: "UTC" });
-const longDate = (iso: string) =>
-  new Date(iso + "T00:00:00Z").toLocaleDateString("id-ID", { weekday: "long", day: "numeric", month: "long", timeZone: "UTC" });
+const dateFmt = (iso: string, o: Intl.DateTimeFormatOptions) =>
+  new Date(iso + "T00:00:00Z").toLocaleDateString("en-GB", { ...o, timeZone: "UTC" });
+const shortDate = (iso: string) => dateFmt(iso, { day: "numeric", month: "short" });
+const longDate = (iso: string) => dateFmt(iso, { weekday: "long", day: "numeric", month: "long", year: "numeric" });
+const askDate = (iso: string) => dateFmt(iso, { day: "numeric", month: "long", year: "numeric" });
+const daysBetween = (from: string, to: string) => Math.round((Date.parse(to) - Date.parse(from)) / DAY_MS) + 1;
+/** Today's date in Jakarta, YYYY-MM-DD (the dashboard's calendar). */
+const jakartaToday = () => new Date(Date.now() + 7 * 3_600_000).toISOString().slice(0, 10);
+
+/** Reads ?range=…&from=…&to=… so a view can be shared or reloaded. */
+function selectionFromUrl(): Selection {
+  try {
+    const p = new URLSearchParams(window.location.search);
+    const range = p.get("range");
+    const from = p.get("from"), to = p.get("to");
+    if (range === "custom" && from && to) return { range: "custom", from, to };
+    if (range === "today" || range === "7d" || range === "30d") return { range };
+  } catch {
+    /* no window during prerender */
+  }
+  return { range: "7d" };
+}
 
 /** Smallest 1/2/2.5/5 x 10^k at or above `v`. */
 function niceCeil(v: number): number {
@@ -51,7 +74,7 @@ function Delta({ now, before, label, lowerIsBetter }: { now: number; before: num
   const up = pct >= 0;
   return (
     <span className={up !== Boolean(lowerIsBetter) ? s.deltaUp : s.deltaDown}>
-      {up ? "▲" : "▼"} {Math.abs(pct).toLocaleString("id-ID", { maximumFractionDigits: 1 })}%{" "}
+      {up ? "▲" : "▼"} {Math.abs(pct).toLocaleString("en-US", { maximumFractionDigits: 1 })}%{" "}
       <span className={s.deltaLabel}>vs {label}</span>
     </span>
   );
@@ -70,8 +93,8 @@ function useWidth<T extends HTMLElement>() {
   return [ref, w] as const;
 }
 
-/** Daily sales (bars) and profit (line) on one Rupiah axis, with a per-day hover tooltip. */
-function SalesChart({ days }: { days: Day[] }) {
+/** Daily sales (bars) and profit (line) on one Rupiah axis, with a per-day tooltip; a click opens that day. */
+function SalesChart({ days, onPick }: { days: Day[]; onPick: (date: string) => void }) {
   const [ref, width] = useWidth<HTMLDivElement>();
   const [hover, setHover] = useState<number | null>(null);
   const H = 240, top = 12, bottom = 28, left = 64, right = 12;
@@ -92,7 +115,7 @@ function SalesChart({ days }: { days: Day[] }) {
   return (
     <div ref={ref} className={s.chartWrap} onMouseLeave={() => setHover(null)}>
       {width > 0 && (
-        <svg width={width} height={H} role="img" aria-label="Grafik penjualan dan profit harian">
+        <svg width={width} height={H} role="img" aria-label="Daily sales and profit chart">
           {ticks.map((t) => (
             <g key={t}>
               <line x1={left} x2={width - right} y1={y(t)} y2={y(t)} className={t === 0 ? s.axis : s.gridLine} />
@@ -128,7 +151,9 @@ function SalesChart({ days }: { days: Day[] }) {
               width={band}
               height={plotH}
               fill="transparent"
+              className={s.hit}
               onMouseEnter={() => setHover(i)}
+              onClick={() => onPick(d.date)}
             />
           ))}
         </svg>
@@ -141,12 +166,12 @@ function SalesChart({ days }: { days: Day[] }) {
         >
           <strong>{longDate(h.date)}</strong>
           <span>
-            <i className={s.keySales} /> Penjualan <b>{rupiah(h.sales)}</b>
+            <i className={s.keySales} /> Sales <b>{rupiah(h.sales)}</b>
           </span>
           <span>
             <i className={s.keyProfit} /> Profit <b>{rupiah(h.profit)}</b>
           </span>
-          <span className={s.tipMuted}>{h.transactions} transaksi</span>
+          <span className={s.tipMuted}>{h.transactions} transactions · click to open this day</span>
         </div>
       )}
     </div>
@@ -154,19 +179,30 @@ function SalesChart({ days }: { days: Day[] }) {
 }
 
 export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (q: string) => void }) {
-  const [range, setRange] = useState<Range>("7d");
+  // Client-only (DemoPos mounts the dashboard after hydration), so the URL can seed the first render.
+  const [sel, setSel] = useState<Selection>(selectionFromUrl);
+  const [draft, setDraft] = useState<{ from: string; to: string } | null>(null);
   const [data, setData] = useState<Data | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const today = jakartaToday();
 
   useEffect(() => {
     if (role !== "owner") return;
+    const qs = new URLSearchParams({ range: sel.range, ...(sel.range === "custom" ? { from: sel.from, to: sel.to } : {}) });
+    try {
+      const url = new URL(window.location.href);
+      url.search = new URLSearchParams({ view: "dashboard", ...Object.fromEntries(qs) }).toString();
+      window.history.replaceState(null, "", url);
+    } catch {
+      /* URL sync is a convenience */
+    }
     let live = true;
     setLoading(true);
     setError(null);
-    fetch(`/api/demo-dashboard?role=${role}&range=${range}`)
+    fetch(`/api/demo-dashboard?role=${role}&${qs}`)
       .then(async (r) => {
-        if (!r.ok) throw new Error(r.status === 502 ? "Data POS tidak bisa dihubungi. Pastikan mock-pos berjalan." : await r.text());
+        if (!r.ok) throw new Error(r.status === 502 ? "POS data is unreachable. Make sure mock-pos is running." : await r.text());
         return (await r.json()) as Data;
       })
       .then((d) => live && setData(d))
@@ -175,7 +211,7 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
     return () => {
       live = false;
     };
-  }, [role, range]);
+  }, [role, sel]);
 
   if (role !== "owner") {
     return (
@@ -183,13 +219,37 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
         <span className={s.lockIcon} aria-hidden>
           🔒
         </span>
-        <h2>Dashboard khusus Owner</h2>
-        <p>Hanya owner yang dapat melihat penjualan dan profit. Ganti peran ke Owner untuk membuka dashboard.</p>
+        <h2>Dashboard is for the owner</h2>
+        <p>Only the owner can view sales and profit. Switch the role to Owner to open the dashboard.</p>
       </div>
     );
   }
 
-  const meta = RANGES.find((r) => r.id === range)!;
+  const pick = (date: string) => {
+    setDraft(null);
+    setSel({ range: "custom", from: date, to: date });
+  };
+  const draftError = draft
+    ? !draft.from || !draft.to
+      ? "Choose both dates."
+      : draft.from > draft.to
+        ? "From must be on or before To."
+        : draft.to > today
+          ? "To cannot be in the future."
+          : daysBetween(draft.from, draft.to) > MAX_DAYS
+            ? `Choose at most ${MAX_DAYS} days.`
+            : null
+    : null;
+
+  const span = data ? daysBetween(data.from, data.to) : 0;
+  const prevLabel =
+    sel.range === "custom" ? (span === 1 ? "the day before" : `previous ${span} days`) : PRESETS.find((p) => p.id === sel.range)!.prev;
+  const question = !data
+    ? "Profit this week?"
+    : data.from === data.to
+      ? `Profit on ${askDate(data.from)}?`
+      : `Profit from ${askDate(data.from)} to ${askDate(data.to)}?`;
+
   const t = data?.totals, p = data?.previous;
   const margin = t && t.sales ? (t.profit / t.sales) * 100 : 0;
   const avg = t && t.transactions ? t.sales / t.transactions : 0;
@@ -201,42 +261,91 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
     <div className={s.dash}>
       <div className={s.top}>
         <div>
-          <h1 className={s.title}>Dashboard Penjualan</h1>
+          <h1 className={s.title}>Sales Dashboard</h1>
           <p className={s.sub}>
             Kopi Tepi · {data ? (data.from === data.to ? longDate(data.to) : `${shortDate(data.from)} – ${shortDate(data.to)}`) : "…"}
           </p>
         </div>
         <div className={s.controls}>
-          <div className={s.ranges} role="group" aria-label="Rentang waktu">
-            {RANGES.map((r) => (
-              <button key={r.id} type="button" className={s.range} aria-pressed={range === r.id} onClick={() => setRange(r.id)}>
+          <div className={s.ranges} role="group" aria-label="Date range">
+            {PRESETS.map((r) => (
+              <button
+                key={r.id}
+                type="button"
+                className={s.range}
+                aria-pressed={sel.range === r.id && !draft}
+                onClick={() => {
+                  setDraft(null);
+                  setSel({ range: r.id });
+                }}
+              >
                 {r.label}
               </button>
             ))}
+            <button
+              type="button"
+              className={s.range}
+              aria-pressed={sel.range === "custom" || !!draft}
+              onClick={() => setDraft(sel.range === "custom" ? { from: sel.from, to: sel.to } : { from: data?.from ?? today, to: data?.to ?? today })}
+            >
+              📅 Custom
+            </button>
           </div>
-          <button type="button" className={s.ask} onClick={() => onAsk(meta.ask)}>
-            ✨ Tanya NEXUS: {meta.ask}
+          <button type="button" className={s.ask} onClick={() => onAsk(question)}>
+            ✨ Ask NEXUS
           </button>
         </div>
       </div>
+
+      {draft && (
+        <form
+          className={s.custom}
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (!draftError) {
+              setSel({ range: "custom", from: draft.from, to: draft.to });
+              setDraft(null);
+            }
+          }}
+        >
+          <label>
+            From
+            <input type="date" value={draft.from} max={today} onChange={(e) => setDraft({ ...draft, from: e.target.value })} />
+          </label>
+          <label>
+            To
+            <input type="date" value={draft.to} max={today} onChange={(e) => setDraft({ ...draft, to: e.target.value })} />
+          </label>
+          <button type="button" className={s.linkBtn} onClick={() => setDraft({ ...draft, to: draft.from })}>
+            Single day
+          </button>
+          <button type="submit" className={s.apply} disabled={!!draftError}>
+            Apply
+          </button>
+          <button type="button" className={s.linkBtn} onClick={() => setDraft(null)}>
+            Cancel
+          </button>
+          {draftError && <span className={s.customError}>{draftError}</span>}
+        </form>
+      )}
 
       {error && <p className={s.error}>{error}</p>}
 
       <div className={`${s.body} ${loading ? s.loading : ""}`} aria-busy={loading}>
         <div className={s.kpis}>
           {[
-            { label: "Penjualan", value: t?.sales, prev: p?.sales },
-            { label: "HPP", value: t?.cogs, prev: p?.cogs, lowerIsBetter: true },
-            { label: "Profit", value: t?.profit, prev: p?.profit, extra: t ? `Margin ${margin.toLocaleString("id-ID", { maximumFractionDigits: 1 })}%` : "" },
-            { label: "Transaksi", value: t?.transactions, prev: p?.transactions, plain: true },
-            { label: "Rata-rata / transaksi", value: avg, prev: prevAvg },
+            { label: "Sales", value: t?.sales, prev: p?.sales },
+            { label: "COGS", value: t?.cogs, prev: p?.cogs, lowerIsBetter: true },
+            { label: "Profit", value: t?.profit, prev: p?.profit, extra: t ? `Margin ${margin.toLocaleString("en-US", { maximumFractionDigits: 1 })}%` : "" },
+            { label: "Transactions", value: t?.transactions, prev: p?.transactions, plain: true },
+            { label: "Average per transaction", value: avg, prev: prevAvg },
           ].map((k) => (
             <div key={k.label} className={s.kpi}>
               <span className={s.kpiLabel}>{k.label}</span>
               <span className={s.kpiValue}>
-                {k.value === undefined || !data ? "—" : k.plain ? k.value.toLocaleString("id-ID") : rupiah(k.value)}
+                {k.value === undefined || !data ? "—" : k.plain ? k.value.toLocaleString("en-US") : rupiah(k.value)}
               </span>
-              {data && k.prev !== undefined && <Delta now={k.value ?? 0} before={k.prev} label={meta.prev} lowerIsBetter={k.lowerIsBetter} />}
+              {data && k.prev !== undefined && <Delta now={k.value ?? 0} before={k.prev} label={prevLabel} lowerIsBetter={k.lowerIsBetter} />}
               {k.extra && <span className={s.kpiExtra}>{k.extra}</span>}
             </div>
           ))}
@@ -244,18 +353,18 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
 
         {data && data.totals.missing_cost_items > 0 && (
           <p className={s.warn} role="note">
-            <span aria-hidden>⚠️</span> {data.totals.missing_cost_items.toLocaleString("id-ID")} item terjual tanpa HPP (Kue Lapis
-            Titipan), jadi profit belum memperhitungkan biayanya.
+            <span aria-hidden>⚠️</span> {data.totals.missing_cost_items.toLocaleString("en-US")} items were sold without COGS
+            (Consignment Layer Cake), so profit does not include their cost yet.
           </p>
         )}
 
         <div className={s.grid}>
           <section className={`${s.card} ${s.wide}`}>
             <div className={s.cardHead}>
-              <h2>Penjualan &amp; profit harian</h2>
+              <h2>Daily sales &amp; profit</h2>
               <div className={s.legend}>
                 <span>
-                  <i className={s.keySales} /> Penjualan
+                  <i className={s.keySales} /> Sales
                 </span>
                 <span>
                   <i className={s.keyProfit} /> Profit
@@ -263,21 +372,21 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
               </div>
             </div>
             {data && data.days.length > 1 ? (
-              <SalesChart days={data.days} />
+              <SalesChart days={data.days} onPick={pick} />
             ) : (
-              <p className={s.note}>Pilih 7 atau 30 hari untuk melihat tren harian.</p>
+              <p className={s.note}>One day selected. Choose a longer range to see the daily trend.</p>
             )}
             {data && (
               <details className={s.table}>
-                <summary>Lihat sebagai tabel</summary>
+                <summary>View as table</summary>
                 <table>
                   <thead>
                     <tr>
-                      <th>Tanggal</th>
-                      <th>Penjualan</th>
-                      <th>HPP</th>
+                      <th>Date</th>
+                      <th>Sales</th>
+                      <th>COGS</th>
                       <th>Profit</th>
-                      <th>Transaksi</th>
+                      <th>Transactions</th>
                     </tr>
                   </thead>
                   <tbody>
@@ -298,14 +407,14 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
 
           <section className={s.card}>
             <div className={s.cardHead}>
-              <h2>Produk terlaris</h2>
+              <h2>Top products</h2>
             </div>
             <ol className={s.products}>
               {data?.products.slice(0, 7).map((x, i) => (
-                <li key={x.name} title={`${x.name}: ${x.qty} terjual, ${rupiah(x.sales)}`}>
+                <li key={x.name} title={`${x.name}: ${x.qty} sold, ${rupiah(x.sales)}`}>
                   <span className={s.rank}>{i + 1}</span>
                   <span className={s.pName}>{x.name}</span>
-                  <span className={s.pQty}>{x.qty.toLocaleString("id-ID")}×</span>
+                  <span className={s.pQty}>{x.qty.toLocaleString("en-US")}×</span>
                   <span className={s.pTrack} aria-hidden>
                     <span className={s.pBar} style={{ width: `${(x.qty / maxQty) * 100}%` }} />
                   </span>
@@ -316,9 +425,9 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
 
           <section className={s.card}>
             <div className={s.cardHead}>
-              <h2>Metode bayar</h2>
+              <h2>Payment methods</h2>
             </div>
-            <div className={s.stack} role="img" aria-label="Porsi penjualan per metode bayar">
+            <div className={s.stack} role="img" aria-label="Share of sales by payment method">
               {data?.payments.map((m) => (
                 <span
                   key={m.method}
@@ -335,7 +444,7 @@ export function Dashboard({ role, onAsk }: { role: "owner" | "cashier"; onAsk: (
                   <span>{METHOD_LABEL[m.method]}</span>
                   <span className={s.payPct}>{paySales ? Math.round((m.sales / paySales) * 100) : 0}%</span>
                   <span className={s.payVal}>
-                    {rupiah(m.sales)} · {m.transactions.toLocaleString("id-ID")} trx
+                    {rupiah(m.sales)} · {m.transactions.toLocaleString("en-US")} transactions
                   </span>
                 </li>
               ))}

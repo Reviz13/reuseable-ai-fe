@@ -12,7 +12,7 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
     <>
       {denied.success && (
         <p className="error login" role="alert">
-          Akun ini tidak memiliki akses ke {denied.data}
+          This account does not have access to {denied.data}
         </p>
       )}
       <LoginForm supabaseUrl={url} anonKey={anonKey} />

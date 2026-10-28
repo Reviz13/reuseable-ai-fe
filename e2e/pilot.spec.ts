@@ -2,8 +2,8 @@ import { resolve } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
 import { PROFIT_QUESTION, fetchThisWeekProfit, formatRupiah } from "./profit";
 
-const FORBIDDEN = "Hanya owner yang dapat melihat profit.";
-const REFUND_QUESTION = "Bagaimana cara refund transaksi?";
+const FORBIDDEN = "Only the owner can view profit.";
+const REFUND_QUESTION = "How do I refund a transaction?";
 
 // Playwright CSS locators pierce open shadow roots, so "ai-assistant .launcher" reaches inside the widget.
 const widget = (page: Page) => page.locator("ai-assistant");
@@ -63,8 +63,8 @@ test.describe("POS pilot demo (/demo/pos)", () => {
     await openWidget(page);
     await widget(page).locator(".form input[type=text]").fill("draft");
 
-    await page.getByRole("button", { name: "Kasir" }).click();
-    await expect(page.getByRole("button", { name: "Kasir" })).toHaveAttribute("aria-pressed", "true");
+    await page.getByRole("button", { name: "Cashier" }).click();
+    await expect(page.getByRole("button", { name: "Cashier" })).toHaveAttribute("aria-pressed", "true");
     // key={role}: a fresh <ai-assistant>, closed, with no conversation.
     await expect(widget(page)).toHaveCount(1);
     await expect(widget(page).locator(".panel")).toHaveCount(0);
@@ -97,7 +97,7 @@ test.describe("admin upload -> cited answer", () => {
     await page.goto("/login");
     await page.locator("#email").fill(email!);
     await page.locator("#password").fill(password!);
-    await page.getByRole("button", { name: "Masuk" }).click();
+    await page.getByRole("button", { name: "Sign in" }).click();
     await page.waitForURL(/\/admin\//);
 
     await page.goto("/admin/pos/knowledge");

@@ -1151,3 +1151,93 @@ describe("runChat: knowledge-grounded amounts (prices from the retrieved docs)",
     expect(r!.guardrailReplaced).toBe(true);
   });
 });
+
+describe("English assistant (language en)", () => {
+  const fresh = () => new AbortController().signal;
+  const en: AssistantRow = { ...assistant, language: "en", persona_prompt: "You are NEXUS." };
+  const enInput = (role: string, message: string) => ({ ...input(role, message), assistant: en });
+
+  it("the system prompt is in English, carries today's date and the English not-found line", () => {
+    const p = buildSystemPrompt(en, [], false, { date: "2026-10-29", tz: "Asia/Jakarta" });
+    expect(p).toContain("Rules:");
+    expect(p).toContain('- Always answer in the language with code "en".');
+    expect(p).toContain("Today is 2026-10-29 (time zone Asia/Jakarta)");
+    expect(p).toContain("If the question is not about profit, reply exactly: Sorry, I could not find that in the guides.");
+    expect(p).not.toContain("Aturan:");
+  });
+
+  it("runChat tells the model the user's local date (Jakarta, not UTC)", async () => {
+    let system = "";
+    const llm: LlmAdapter = {
+      async *stream(req) {
+        system = req.system;
+        yield text("ok");
+        yield end();
+      },
+    };
+    const s = setup({ llm });
+    s.deps.now = () => new Date("2026-09-29T20:00:00Z"); // already 30 Sept in Jakarta
+    await runChat(s.deps, enInput("owner", "hello"), s.emit, fresh());
+    expect(system).toContain("Today is 2026-09-30");
+  });
+
+  it("cashier profit question -> English FORBIDDEN copy", async () => {
+    const llm = createFakeAdapter([[call({ period: "this_week" }), end("tool_use")], [text("Hmm."), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, enInput("cashier", "Profit this week?"), s.emit, fresh());
+    expect(r!.text).toBe("Only the owner can view profit.");
+  });
+
+  it("a wrong figure is replaced by the English template with the custom single-day label and note", async () => {
+    const llm = createFakeAdapter([
+      [call({ period: "custom", start_date: "2026-09-30", end_date: "2026-09-30" }), end("tool_use")],
+      [text("Profit on September 30 was Rp9,999,000."), end()],
+    ]);
+    const s = setup({ llm, getProfit: async () => ({ ...report, from: "2026-09-30", to: "2026-09-30" }) });
+    const r = await runChat(s.deps, enInput("owner", "Profit on September 30?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).toBe(
+      "Profit on 2026-09-30: Rp2,550,000. Sales Rp4,250,000, COGS Rp1,700,000, 312 transactions.\nNote: profit does not yet include 3 items without COGS.",
+    );
+  });
+
+  it("a correct English answer with comma grouping passes as written", async () => {
+    const llm = createFakeAdapter([
+      [call({ period: "this_week" }), end("tool_use")],
+      [text("This week's profit is Rp2,550,000 on sales of Rp4,250,000."), end()],
+    ]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, enInput("owner", "Profit this week?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.text.startsWith("This week's profit is Rp2,550,000")).toBe(true);
+    expect(r!.text).toContain("Note: profit does not yet include 3 items without COGS.");
+  });
+
+  it("an invented figure with no tool call -> English NO_DATA copy", async () => {
+    const llm = createFakeAdapter([[text("Sales today were Rp5,000,000."), end()]]);
+    const s = setup({ llm });
+    const r = await runChat(s.deps, enInput("owner", "Sales today?"), s.emit, fresh());
+    expect(r!.text).toBe('I cannot quote figures without data from the POS. Try asking, for example, "Profit this week?"');
+  });
+
+  it("the English not-found copy marks the answer sad and skips citations", async () => {
+    const llm = createFakeAdapter([[text("Sorry, I could not find that in the guides. Please contact the support team."), end()]]);
+    const s = setup({ llm, chunks: [chunk("a", "d1", 0.9)] });
+    const r = await runChat(s.deps, enInput("owner", "What is the wifi?"), s.emit, fresh());
+    expect(r!.avatarFinal).toBe("sad");
+    expect(r!.citations).toEqual([]);
+  });
+});
+
+describe("English profit line", () => {
+  it("named periods keep their date range; custom labels are not repeated", async () => {
+    const { copyFor } = await import("../src/copy.js");
+    const base = { from: "2026-10-26", to: "2026-10-29", profit: "Rp1", sales: "Rp2", cogs: "Rp1", transactions: 3 };
+    expect(copyFor("en").profitLine({ ...base, label: "this week" })).toBe(
+      "Profit this week (2026-10-26 to 2026-10-29): Rp1. Sales Rp2, COGS Rp1, 3 transactions.",
+    );
+    expect(copyFor("en").profitLine({ ...base, label: "from 2026-10-26 to 2026-10-29" })).toBe(
+      "Profit from 2026-10-26 to 2026-10-29: Rp1. Sales Rp2, COGS Rp1, 3 transactions.",
+    );
+  });
+});

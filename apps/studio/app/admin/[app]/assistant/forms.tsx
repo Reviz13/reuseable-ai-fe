@@ -15,7 +15,7 @@ export function ConfigForm({ app, config }: { app: string; config: z.input<typeo
   const [state, action, pending] = useActionState(saveAssistant.bind(null, app), EMPTY);
   return (
     <form action={action}>
-      <label htmlFor="name">Nama</label>
+      <label htmlFor="name">Name</label>
       <input id="name" name="name" type="text" defaultValue={config.name} required />
       <FieldIssues state={state} field="name" />
 
@@ -25,7 +25,7 @@ export function ConfigForm({ app, config }: { app: string; config: z.input<typeo
 
       <div className="row">
         <div>
-          <label htmlFor="language">Bahasa</label>
+          <label htmlFor="language">Language</label>
           <input id="language" name="language" type="text" defaultValue={config.language} required />
           <FieldIssues state={state} field="language" />
         </div>
@@ -45,7 +45,7 @@ export function ConfigForm({ app, config }: { app: string; config: z.input<typeo
         <div>
           <label htmlFor="fallback_adapter">Fallback</label>
           <select id="fallback_adapter" name="fallback_adapter" defaultValue={config.fallback_adapter ?? ""}>
-            <option value="">(tidak ada)</option>
+            <option value="">(none)</option>
             <option value="claude">claude</option>
             <option value="openai_compat">openai_compat</option>
           </select>
@@ -55,25 +55,25 @@ export function ConfigForm({ app, config }: { app: string; config: z.input<typeo
 
       <div className="row">
         <div>
-          <label htmlFor="min_score">Skor minimum (0-1)</label>
+          <label htmlFor="min_score">Minimum score (0-1)</label>
           <input id="min_score" name="min_score" type="number" step="0.01" min="0" max="1" defaultValue={config.min_score} required />
           <FieldIssues state={state} field="min_score" />
         </div>
         <div>
-          <label htmlFor="accent">Warna aksen</label>
+          <label htmlFor="accent">Accent color</label>
           <input id="accent" name="accent" type="color" defaultValue={config.theme.accent} />
           <FieldIssues state={state} field="theme" />
         </div>
       </div>
 
-      <label htmlFor="allowed_origins">Origin yang diizinkan (satu per baris)</label>
+      <label htmlFor="allowed_origins">Allowed origins (one per line)</label>
       <textarea id="allowed_origins" name="allowed_origins" defaultValue={(config.allowed_origins).join("\n")} />
       <FieldIssues state={state} field="allowed_origins" />
 
       <FormMessages state={state} />
       <p>
         <button type="submit" disabled={pending}>
-          {pending ? "Menyimpan..." : "Simpan"}
+          {pending ? "Saving..." : "Save"}
         </button>
       </p>
     </form>
@@ -86,11 +86,11 @@ export function AvatarSlot({ app, state, src }: { app: string; state: AvatarStat
     <form action={action} className="slot">
       <strong>{state}</strong>
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      <div>{src ? <img src={src} alt={`Avatar ${state}`} /> : <p className="muted">Belum ada</p>}</div>
-      <input type="file" name="file" accept="image/png,image/webp,image/jpeg" required aria-label={`Unggah avatar ${state}`} />
+      <div>{src ? <img src={src} alt={`Avatar ${state}`} /> : <p className="muted">None yet</p>}</div>
+      <input type="file" name="file" accept="image/png,image/webp,image/jpeg" required aria-label={`Upload ${state} avatar`} />
       <FormMessages state={result} />
       <button type="submit" disabled={pending}>
-        {pending ? "..." : "Unggah"}
+        {pending ? "..." : "Upload"}
       </button>
     </form>
   );
@@ -108,7 +108,7 @@ export function AvatarPreview({ frames }: { frames: Partial<Record<AvatarState, 
   return (
     <div className="preview">
       {/* eslint-disable-next-line @next/next/no-img-element */}
-      {src ? <img src={src} alt={`Pratinjau ${current}`} /> : <p className="muted">Belum ada gambar</p>}
+      {src ? <img src={src} alt={`Preview: ${current}`} /> : <p className="muted">No image yet</p>}
       <p>{current}</p>
     </div>
   );

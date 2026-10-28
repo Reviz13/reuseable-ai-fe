@@ -7,14 +7,14 @@ import { runAction, type FormState } from "@/lib/action";
 import { parseApp } from "@/lib/guard";
 
 const UPLOAD_ERRORS: Record<number, string> = {
-  413: "Berkas terlalu besar (maksimal 20 MB).",
-  415: "Jenis berkas tidak didukung (gunakan PDF, DOCX, MD, atau TXT).",
+  413: "File is too large (max 20 MB).",
+  415: "File type not supported (use PDF, DOCX, MD, or TXT).",
 };
 
 export async function uploadDocument(app: string, _prev: FormState, formData: FormData): Promise<FormState> {
   const appId = parseApp(app);
   const file = formData.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Pilih berkas terlebih dahulu." };
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose a file first." };
   return runAction(async () => {
     const body = new FormData();
     body.set("file", file, file.name);
@@ -22,7 +22,7 @@ export async function uploadDocument(app: string, _prev: FormState, formData: Fo
     const qs = typeof documentId === "string" && documentId ? `?document_id=${encodeURIComponent(documentId)}` : "";
     await aiAdmin(`/admin/${appId}/documents${qs}`, { method: "POST", body });
     revalidatePath(`/admin/${appId}/knowledge`);
-    return { ok: true, message: "Berkas diunggah dan sedang diproses." };
+    return { ok: true, message: "File uploaded and processing." };
   }, UPLOAD_ERRORS);
 }
 
@@ -34,7 +34,7 @@ export async function addFaq(app: string, _prev: FormState, formData: FormData):
       body: JSON.stringify({ question: String(formData.get("question") ?? ""), answer: String(formData.get("answer") ?? "") }),
     });
     revalidatePath(`/admin/${appId}/knowledge`);
-    return { ok: true, message: "FAQ ditambahkan." };
+    return { ok: true, message: "FAQ added." };
   });
 }
 
@@ -45,7 +45,7 @@ export async function updateFaq(app: string, documentId: string, _prev: FormStat
       method: "PUT",
       body: JSON.stringify({ question: String(formData.get("question") ?? ""), answer: String(formData.get("answer") ?? "") }),
     });
-    return { ok: true, message: "FAQ diperbarui." };
+    return { ok: true, message: "FAQ updated." };
   });
   revalidatePath(`/admin/${appId}/knowledge/${documentId}`);
   revalidatePath(`/admin/${appId}/knowledge`);
@@ -60,9 +60,9 @@ export async function activateVersion(app: string, documentId: string, versionId
         method: "POST",
         body: JSON.stringify({ version_id: versionId }),
       });
-      return { ok: true, message: "Versi diaktifkan." };
+      return { ok: true, message: "Version activated." };
     },
-    { 409: "Versi ini gagal diproses atau kosong" },
+    { 409: "This version failed to process or is empty" },
   );
   revalidatePath(`/admin/${appId}/knowledge/${documentId}`);
   revalidatePath(`/admin/${appId}/knowledge`);

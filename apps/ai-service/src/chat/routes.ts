@@ -2,7 +2,7 @@ import type { FastifyInstance, FastifyReply, FastifyRequest } from "fastify";
 import { z } from "zod";
 import { AppIdSchema, ChatRequestSchema, encodeSse, FeedbackRequestSchema, type SseEvent } from "@ai/contracts";
 import { createAuditWriter } from "../audit.js";
-import { INTERNAL, LLM_UNAVAILABLE, NOT_FOUND, RATE_LIMITED, TOO_LONG } from "../copy.js";
+import { copyFor, RATE_LIMITED, TOO_LONG } from "../copy.js";
 import { HttpError, parseRequest } from "../http.js";
 import { LlmUnavailableError, type LlmMessage } from "../llm/types.js";
 import { createRetriever } from "../rag/retriever.js";
@@ -131,7 +131,7 @@ export function registerChatRoutes(app: FastifyInstance): void {
               Date.now() - started,
             ],
           );
-          if (result.toolCalls.length === 0 && result.text.includes(NOT_FOUND)) {
+          if (result.toolCalls.length === 0 && result.text.includes(copyFor(assistant.language).NOT_FOUND)) {
             await db.query("insert into knowledge_gaps (app, question, top_score) values ($1, $2, $3)", [
               body.app,
               body.message,
@@ -143,10 +143,10 @@ export function registerChatRoutes(app: FastifyInstance): void {
       } catch (err) {
         if (err instanceof LlmUnavailableError) {
           req.log.warn({ err }, "llm unavailable");
-          emit({ type: "error", code: "LLM_UNAVAILABLE", message: LLM_UNAVAILABLE });
+          emit({ type: "error", code: "LLM_UNAVAILABLE", message: copyFor(assistant.language).LLM_UNAVAILABLE });
         } else if (!ac.signal.aborted) {
           req.log.error({ err }, "chat failed");
-          emit({ type: "error", code: "INTERNAL", message: INTERNAL });
+          emit({ type: "error", code: "INTERNAL", message: copyFor(assistant.language).INTERNAL });
         }
         emit({ type: "state", avatar: "sad" });
       } finally {

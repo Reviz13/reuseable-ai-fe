@@ -57,7 +57,7 @@ Copy `.env.example` to `.env` at the repo root. `pnpm dev` loads this one file f
 2. Apply `supabase/migrations/0001` to `0005` in order (SQL editor or `supabase db push`), then run `supabase/seed.sql` (the `pos` assistant, allowed origin `http://localhost:3000`).
 3. `pnpm seed:admin`: creates `SEED_ADMIN_EMAIL` through the Admin API and grants it the `pos` app in `admins` (merging with any apps it already has).
 4. With `pnpm dev` running: `pnpm seed:avatars` uploads `assets/avatar/pos/*.webp` through the admin API.
-5. With `pnpm dev` running: `pnpm seed:knowledge` uploads `assets/knowledge/pos/*.md` (demo knowledge for Kopi Tepi: menu, SOPs, promos, troubleshooting, NEXUS) and waits until each is ingested. Re-running adds a new version only for changed files.
+5. With `pnpm dev` running: `pnpm seed:knowledge` uploads `assets/knowledge/pos/*.md` (English demo knowledge for Kopi Tepi: menu and prices, SOPs, promotions, troubleshooting, the dashboard, NEXUS) and waits until each is ingested. Re-running adds a new version only for changed files.
 
 RLS is enabled on every table with no policies; only ai-service (service role) reads or writes data. `audit_log` is append-only: UPDATE, DELETE and TRUNCATE are revoked and blocked by triggers.
 
@@ -71,7 +71,7 @@ Builds the widget, then starts:
 
 | App | URL |
 |---|---|
-| studio | http://localhost:3000. `/demo/pos` is the demo POS with the widget (switch owner/cashier): a local-only cashier and an owner sales dashboard. `/login` is the admin Studio. |
+| studio | http://localhost:3000. `/demo/pos` is the demo POS with the widget (switch owner/cashier): a local-only cashier and an owner sales dashboard (Today, 7 or 30 days, or a custom From-To of up to 92 days; the range is kept in the URL, e.g. `?view=dashboard&range=custom&from=2026-09-30&to=2026-09-30`). `/login` is the admin Studio. |
 | ai-service | http://localhost:4000 (`/healthz`, `/widget/v1/ai-assistant.js`). |
 | mock-pos | http://localhost:4100. |
 
@@ -120,6 +120,10 @@ Attributes `app`, `api`, `position`, `open`, `lang`, `suggestions` (pipe-separat
 - Terminate TLS in a proxy in front of ai-service. Fastify `trustProxy` is not enabled yet: enable it in `createApp` (`apps/ai-service/src/app.ts`) for the proxy's address so request IPs in logs are the client's. Rate limits key on `(app, sub)`, not IP.
 - CORS (Ruling 46): `/v1/chat` and `/v1/feedback` allow the union of all assistants' allowed origins, because the app is only in the request body. The per-app JWT (`iss == app`) still gates access, so app A's origin can reach app B's chat only with a B-issued token.
 - Database TLS: verified by default for remote hosts; provide `DATABASE_SSL_CA`.
+
+## Language
+
+The assistant's `language` (Studio, Assistant) selects ai-service's fixed copy, system-prompt rules and profit template: `en` (English, `Rp1,234,000`) or Indonesian for anything else (`Rp1.234.000`). The seeded `pos` assistant is English. The widget's `lang` attribute picks its own labels and error copy. The system prompt carries the user's local date (JWT `tz`), so questions such as "Profit on September 30?" resolve to a `custom` period.
 
 ## Known limitations
 

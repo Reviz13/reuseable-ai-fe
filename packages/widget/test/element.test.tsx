@@ -446,3 +446,31 @@ describe("living character", () => {
     expect(q(el, '[role="dialog"]')).toBeNull();
   });
 });
+
+describe("English widget (lang=en)", () => {
+  it("greets, suggests and labels its status in English", async () => {
+    const el = mount({ lang: "en" });
+    await openPanel(el);
+    await waitFor(() => expect(q(el, ".welcome")!.textContent).toContain("Hi! I am Kopi Bot."));
+    expect(qa(el, "button.suggest").map((b) => b.textContent)).toContain("Profit this week?");
+    expect(q(el, ".status")!.textContent).toBe("Ready to help");
+    expect(q<HTMLInputElement>(el, "input")!.placeholder).toBe("Ask a question…");
+  });
+
+  it("uses English error copy, including for the Indonesian 429 text and an over-long question", async () => {
+    chatResponses.push(() => jsonResponse(429, { error: "rate_limited", message: "Terlalu banyak pertanyaan, tunggu sebentar ya." }));
+    chatResponses.push(() => jsonResponse(401, { error: "unauthorized" }));
+    chatResponses.push(() => jsonResponse(401, { error: "unauthorized" }));
+    const el = mount({ lang: "en" });
+    await openPanel(el);
+    await send(el, "hi");
+    await waitFor(() => expect(list(el).textContent).toContain("Too many questions, please wait a moment."));
+    expect(list(el).textContent).not.toContain("Terlalu");
+    await waitFor(() => expect(q<HTMLInputElement>(el, "input")!.disabled).toBe(false));
+    await send(el, "again");
+    await waitFor(() => expect(list(el).textContent).toContain("Your session has ended, please reload the page."));
+    await waitFor(() => expect(q<HTMLInputElement>(el, "input")!.disabled).toBe(false));
+    el.ask("x".repeat(2001));
+    await waitFor(() => expect(list(el).textContent).toContain("Your question is too long (maximum 2000 characters)."));
+  });
+});

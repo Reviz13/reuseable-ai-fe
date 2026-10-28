@@ -25,19 +25,19 @@ export default async function AssistantPage({ params }: { params: Promise<{ app:
 
   return (
     <>
-      <h1>Asisten</h1>
+      <h1>Assistant</h1>
       <div className="grid2">
         <section className="card">
-          <h2>Konfigurasi</h2>
+          <h2>Configuration</h2>
           <ConfigForm app={app} config={config} />
         </section>
         <section className="card">
-          <h2>Pratinjau</h2>
+          <h2>Preview</h2>
           <AvatarPreview frames={frames} />
         </section>
       </div>
       <section className="card">
-        <h2>Avatar (5 keadaan)</h2>
+        <h2>Avatar (5 states)</h2>
         <div className="slots">
           {STATES.map((s) => (
             <AvatarSlot key={s} app={app} state={s} src={frames[s]} />

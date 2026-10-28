@@ -76,7 +76,7 @@ describe("menu", () => {
   it("matches the demo cashier catalog: 14 items, one consignment item without HPP", () => {
     expect(MENU).toHaveLength(14);
     expect(MENU.find((m) => m.name === "Cappuccino")).toMatchObject({ price: 28000 });
-    expect(MENU.filter((m) => m.hpp === null).map((m) => m.name)).toEqual(["Kue Lapis Titipan"]);
+    expect(MENU.filter((m) => m.hpp === null).map((m) => m.name)).toEqual(["Consignment Layer Cake"]);
   });
 });
 

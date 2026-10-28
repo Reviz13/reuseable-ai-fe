@@ -1,6 +1,7 @@
 import type { z } from "zod";
 import type { JwtClaims, ToolResult } from "@ai/contracts";
 import type { AuditWriter } from "../audit.js";
+import type { Copy } from "../copy.js";
 import type { PosAdapter } from "../profit/posAdapter.js";
 
 export interface ToolCtx {
@@ -9,6 +10,8 @@ export interface ToolCtx {
   signal: AbortSignal;
   audit: AuditWriter;
   pos: PosAdapter;
+  /** The assistant's copy set; Indonesian when omitted. */
+  copy?: Copy;
 }
 
 export interface ToolDef<A = any, R = any> {

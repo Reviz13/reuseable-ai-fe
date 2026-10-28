@@ -15,43 +15,43 @@ type AiElement = HTMLElement & { getToken: () => Promise<string>; ask(text: stri
 // Static catalog adapted from the Kopi Tepi prototype. The cart lives in this page only: nothing is sent
 // to the POS, so the profit figures the assistant reports stay the same throughout a demo.
 const PRODUCTS: { id: string; name: string; cat: Cat; price: number; emoji: string }[] = [
-  { id: "P01", name: "Es Kopi Susu Tepi", cat: "kopi", price: 24000, emoji: "🧋" },
+  { id: "P01", name: "Tepi Iced Milk Coffee", cat: "kopi", price: 24000, emoji: "🧋" },
   { id: "P02", name: "Americano", cat: "kopi", price: 22000, emoji: "☕" },
   { id: "P03", name: "Cappuccino", cat: "kopi", price: 28000, emoji: "☕" },
-  { id: "P04", name: "Kopi Tubruk", cat: "kopi", price: 15000, emoji: "🫖" },
+  { id: "P04", name: "Tubruk Coffee", cat: "kopi", price: 15000, emoji: "🫖" },
   { id: "P05", name: "V60 Single Origin", cat: "kopi", price: 35000, emoji: "⚗️" },
   { id: "P06", name: "Matcha Latte", cat: "nonkopi", price: 30000, emoji: "🍵" },
-  { id: "P07", name: "Cokelat Panas", cat: "nonkopi", price: 26000, emoji: "🍫" },
-  { id: "P08", name: "Es Teh Tarik", cat: "nonkopi", price: 18000, emoji: "🥤" },
+  { id: "P07", name: "Hot Chocolate", cat: "nonkopi", price: 26000, emoji: "🍫" },
+  { id: "P08", name: "Iced Teh Tarik", cat: "nonkopi", price: 18000, emoji: "🥤" },
   { id: "P09", name: "Lemon Tea", cat: "nonkopi", price: 16000, emoji: "🍋" },
-  { id: "P10", name: "Roti Bakar Srikaya", cat: "makanan", price: 20000, emoji: "🍞" },
-  { id: "P11", name: "Croissant Mentega", cat: "makanan", price: 25000, emoji: "🥐" },
-  { id: "P12", name: "Pisang Goreng Keju", cat: "makanan", price: 18000, emoji: "🍌" },
-  { id: "P13", name: "Nasi Goreng Kampung", cat: "makanan", price: 32000, emoji: "🍳" },
-  { id: "P14", name: "Kue Lapis Titipan", cat: "makanan", price: 12000, emoji: "🍰" },
+  { id: "P10", name: "Kaya Toast", cat: "makanan", price: 20000, emoji: "🍞" },
+  { id: "P11", name: "Butter Croissant", cat: "makanan", price: 25000, emoji: "🥐" },
+  { id: "P12", name: "Cheese Banana Fritters", cat: "makanan", price: 18000, emoji: "🍌" },
+  { id: "P13", name: "Village Fried Rice", cat: "makanan", price: 32000, emoji: "🍳" },
+  { id: "P14", name: "Consignment Layer Cake", cat: "makanan", price: 12000, emoji: "🍰" },
 ];
 const BY_ID = new Map(PRODUCTS.map((p) => [p.id, p]));
 
 const CAT_STYLE: Record<Cat, { bg: string; ink: string; label: string }> = {
-  kopi: { bg: "#EBDDCF", ink: "#5B3A21", label: "Kopi" },
-  nonkopi: { bg: "#D7E9DD", ink: "#1E5536", label: "Non-kopi" },
-  makanan: { bg: "#F5E4C3", ink: "#74490A", label: "Makanan" },
+  kopi: { bg: "#EBDDCF", ink: "#5B3A21", label: "Coffee" },
+  nonkopi: { bg: "#D7E9DD", ink: "#1E5536", label: "Non-coffee" },
+  makanan: { bg: "#F5E4C3", ink: "#74490A", label: "Food" },
 };
 
-const TAX_RATE = 0.11;
+const TAX_RATE = 0.11; // Indonesian VAT (PPN)
 const QUICK_CASH = [50000, 100000, 200000];
 
 // Role-specific quick questions for the widget's empty panel (pipe separated).
 const SUGGESTIONS: Record<Role, string> = {
-  owner: "Profit hari ini? | Profit minggu ini? | Profit bulan ini? | Bagaimana cara refund transaksi?",
-  cashier: "Bagaimana cara membuka shift? | Bagaimana cara refund transaksi? | Profit hari ini?",
+  owner: "Profit today? | Profit this week? | Profit on September 30? | How much is a Cappuccino?",
+  cashier: "How do I open a shift? | How do I refund a transaction? | What are the opening hours? | Profit today?",
 };
 const AFTER_SALE: Record<Role, { label: string; question: string }> = {
-  owner: { label: "Tanya NEXUS: profit hari ini", question: "Profit hari ini?" },
-  cashier: { label: "Tanya NEXUS: cara refund", question: "Bagaimana cara refund transaksi?" },
+  owner: { label: "Ask NEXUS: profit today", question: "Profit today?" },
+  cashier: { label: "Ask NEXUS: how to refund", question: "How do I refund a transaction?" },
 };
 
-const rupiah = (n: number) => "Rp" + Math.round(n).toLocaleString("id-ID");
+const rupiah = (n: number) => "Rp" + Math.round(n).toLocaleString("en-US");
 const newOrder = () => "KT-" + Math.floor(1000 + Math.random() * 9000);
 
 /** Eases a displayed number toward `value` over ~300 ms. */
@@ -93,6 +93,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
   // Client-only values (random order number, clock) are set after mount to keep hydration stable.
   useEffect(() => {
     setOrder(newOrder());
+    if (new URLSearchParams(window.location.search).get("view") === "dashboard") setView("dashboard");
     setNow(new Date());
     const t = setInterval(() => setNow(new Date()), 30_000);
     return () => clearInterval(t);
@@ -165,31 +166,35 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
           <div>
             <div className={s.brandName}>Kopi Tepi POS</div>
             <div className={s.brandSub}>
-              {now ? now.toLocaleString("id-ID", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : " "}
+              {now ? now.toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : " "}
             </div>
           </div>
         </div>
-        <nav className={s.views} aria-label="Halaman">
+        <nav className={s.views} aria-label="Pages">
           {(["kasir", "dashboard"] as const).map((v) => (
-            <button key={v} type="button" className={s.view} aria-pressed={view === v} onClick={() => setView(v)}>
-              {v === "kasir" ? "🧾 Kasir" : "📊 Dashboard"}
+            <button key={v} type="button" className={s.view} aria-pressed={view === v} onClick={() => {
+                setView(v);
+                // The dashboard keeps its range in the URL; the cashier view has none.
+                if (v === "kasir") window.history.replaceState(null, "", window.location.pathname);
+              }}>
+              {v === "kasir" ? "🧾 Cashier" : "📊 Dashboard"}
             </button>
           ))}
         </nav>
         <div className={s.headRight}>
           <span className={s.session}>
-            Sesi ini: <strong>{session.count}</strong> transaksi · <strong>{rupiah(session.revenue)}</strong>
+            This session: <strong>{session.count}</strong> transactions · <strong>{rupiah(session.revenue)}</strong>
           </span>
-          <div role="group" aria-label="Peran pengguna" className={s.roles}>
-            <span className={s.roleLabel}>Masuk sebagai</span>
+          <div role="group" aria-label="User role" className={s.roles}>
+            <span className={s.roleLabel}>Signed in as</span>
             {(["owner", "cashier"] as const).map((r) => (
               <button key={r} type="button" className={s.role} aria-pressed={role === r} onClick={() => setRole(r)}>
-                {r === "owner" ? "Owner" : "Kasir"}
+                {r === "owner" ? "Owner" : "Cashier"}
               </button>
             ))}
           </div>
           <button type="button" className={s.askAi} onClick={() => askAi()}>
-            ✨ Tanya NEXUS
+            ✨ Ask NEXUS
           </button>
         </div>
       </header>
@@ -201,15 +206,15 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
               <input
                 className={s.search}
                 type="search"
-                placeholder="Cari menu…"
-                aria-label="Cari menu"
+                placeholder="Search menu…"
+                aria-label="Search menu"
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
               />
-              <div className={s.tabs} role="group" aria-label="Kategori">
+              <div className={s.tabs} role="group" aria-label="Categories">
                 {(["all", "kopi", "nonkopi", "makanan"] as const).map((c) => (
                   <button key={c} type="button" className={s.tab} aria-pressed={cat === c} onClick={() => setCat(c)}>
-                    {c === "all" ? "Semua" : CAT_STYLE[c].label}
+                    {c === "all" ? "All" : CAT_STYLE[c].label}
                     <span className={s.tabCount}>{count(c)}</span>
                   </button>
                 ))}
@@ -217,7 +222,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
             </div>
 
             {visible.length === 0 ? (
-              <p className={s.empty}>Menu &ldquo;{query}&rdquo; tidak ditemukan.</p>
+              <p className={s.empty}>No menu item matches &ldquo;{query}&rdquo;.</p>
             ) : (
               <ul className={s.grid}>
                 {visible.map((p) => {
@@ -229,7 +234,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
                         type="button"
                         className={`${s.product} ${qty ? s.inCart : ""}`}
                         onClick={() => add(p.id)}
-                        aria-label={`Tambah ${p.name}, ${rupiah(p.price)}${qty ? `, ${qty} di keranjang` : ""}`}
+                        aria-label={`Add ${p.name}, ${rupiah(p.price)}${qty ? `, ${qty} in cart` : ""}`}
                       >
                         {qty > 0 && (
                           <span key={popped ? bump!.n : 0} className={s.badge} aria-hidden>
@@ -257,9 +262,9 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
             )}
           </main>
 
-          <aside className={s.cart} aria-label="Keranjang">
+          <aside className={s.cart} aria-label="Cart">
             <div className={s.cartHead}>
-              <h2 className={s.cartTitle}>Pesanan</h2>
+              <h2 className={s.cartTitle}>Order</h2>
               <span className={s.order}>#{order}</span>
             </div>
             {cart.length === 0 ? (
@@ -267,7 +272,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
                 <span className={s.cartEmptyIcon} aria-hidden>
                   🛒
                 </span>
-                <span>Keranjang kosong. Ketuk menu untuk menambah.</span>
+                <span>The cart is empty. Tap a menu item to add it.</span>
               </div>
             ) : (
               <ul className={s.lines}>
@@ -278,16 +283,16 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
                       <span className={s.lineName}>{p.name}</span>
                       <span className={s.lineTotal}>{rupiah(p.price * l.qty)}</span>
                       <span className={s.qty}>
-                        <button type="button" className={s.qtyBtn} aria-label={`Kurangi ${p.name}`} onClick={() => setQty(l.id, l.qty - 1)}>
+                        <button type="button" className={s.qtyBtn} aria-label={`Remove one ${p.name}`} onClick={() => setQty(l.id, l.qty - 1)}>
                           −
                         </button>
                         <span className={s.qtyN}>{l.qty}</span>
-                        <button type="button" className={s.qtyBtn} aria-label={`Tambah ${p.name}`} onClick={() => setQty(l.id, l.qty + 1)}>
+                        <button type="button" className={s.qtyBtn} aria-label={`Add one ${p.name}`} onClick={() => setQty(l.id, l.qty + 1)}>
                           +
                         </button>
                       </span>
                       <button type="button" className={s.remove} onClick={() => setQty(l.id, 0)}>
-                        Hapus
+                        Remove
                       </button>
                     </li>
                   );
@@ -301,7 +306,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
                 <span>{rupiah(subtotal)}</span>
               </div>
               <div className={s.row}>
-                <span>PPN 11%</span>
+                <span>VAT 11%</span>
                 <span>{rupiah(tax)}</span>
               </div>
               <div className={`${s.row} ${s.total}`}>
@@ -311,9 +316,9 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
             </div>
 
             <div className={s.pay}>
-              <div className={s.methods} role="group" aria-label="Metode bayar">
+              <div className={s.methods} role="group" aria-label="Payment method">
                 <button type="button" className={s.method} aria-pressed={method === "cash"} onClick={() => setMethod("cash")}>
-                  💵 Tunai
+                  💵 Cash
                 </button>
                 <button type="button" className={s.method} aria-pressed={method === "qris"} onClick={() => setMethod("qris")}>
                   📱 QRIS
@@ -323,7 +328,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
                 <>
                   <div className={s.quick}>
                     <button type="button" className={s.quickBtn} onClick={() => setCashText(String(total))} disabled={!total}>
-                      Uang pas
+                      Exact amount
                     </button>
                     {QUICK_CASH.map((v) => (
                       <button key={v} type="button" className={s.quickBtn} onClick={() => setCashText(String(v))}>
@@ -334,21 +339,21 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
                   <input
                     className={s.cash}
                     inputMode="numeric"
-                    placeholder="Uang diterima"
-                    aria-label="Uang diterima"
-                    value={cash ? cash.toLocaleString("id-ID") : ""}
+                    placeholder="Cash received"
+                    aria-label="Cash received"
+                    value={cash ? cash.toLocaleString("en-US") : ""}
                     onChange={(e) => setCashText(e.target.value)}
                   />
                   {cash > 0 && total > 0 && (
                     <div className={`${s.change} ${cash < total ? s.short : ""}`}>
-                      {cash < total ? "Kurang " : "Kembalian "}
+                      {cash < total ? "Short by " : "Change "}
                       <strong>{rupiah(Math.abs(cash - total))}</strong>
                     </div>
                   )}
                 </>
               )}
               <button type="button" className={s.payBtn} disabled={!canPay} onClick={pay}>
-                Bayar {total > 0 ? rupiah(total) : ""}
+                Pay {total > 0 ? rupiah(total) : ""}
               </button>
             </div>
           </aside>
@@ -363,14 +368,14 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
           onClick={(e) => e.target === e.currentTarget && nextSale()}
           onKeyDown={(e) => e.key === "Escape" && nextSale()}
         >
-          <div className={s.receipt} role="dialog" aria-modal="true" aria-label="Pembayaran berhasil">
+          <div className={s.receipt} role="dialog" aria-modal="true" aria-label="Payment successful">
             <svg className={s.check} viewBox="0 0 72 72" aria-hidden>
               <circle className={s.checkCircle} cx="36" cy="36" r="33" />
               <path className={s.checkMark} d="M22 37l10 10 19-21" />
             </svg>
-            <h2 className={s.receiptTitle}>Pembayaran berhasil</h2>
+            <h2 className={s.receiptTitle}>Payment successful</h2>
             <p className={s.receiptSub}>
-              #{paid.order} · {paid.method === "cash" ? "Tunai" : "QRIS"}
+              #{paid.order} · {paid.method === "cash" ? "Cash" : "QRIS"}
             </p>
             <ul className={s.receiptLines}>
               {paid.lines.map((l) => (
@@ -388,7 +393,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
                 <span>{rupiah(paid.subtotal)}</span>
               </div>
               <div className={s.row}>
-                <span>PPN 11%</span>
+                <span>VAT 11%</span>
                 <span>{rupiah(paid.tax)}</span>
               </div>
               <div className={`${s.row} ${s.total}`}>
@@ -397,14 +402,14 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
               </div>
               {paid.method === "cash" && (
                 <div className={s.row}>
-                  <span>Kembalian</span>
+                  <span>Change</span>
                   <span>{rupiah(paid.cash - paid.total)}</span>
                 </div>
               )}
             </div>
             <div className={s.receiptActions}>
               <button type="button" className={s.payBtn} onClick={nextSale} autoFocus>
-                Transaksi baru
+                New transaction
               </button>
               <button
                 type="button"
@@ -422,7 +427,7 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
       )}
 
       <Script src={`${aiServiceUrl}/widget/v1/ai-assistant.js`} strategy="afterInteractive" />
-      <ai-assistant key={role} ref={attach} app="pos" api={aiServiceUrl} lang="id" position="bottom-left" suggestions={SUGGESTIONS[role]} />
+      <ai-assistant key={role} ref={attach} app="pos" api={aiServiceUrl} lang="en" position="bottom-left" suggestions={SUGGESTIONS[role]} />
     </div>
   );
 }

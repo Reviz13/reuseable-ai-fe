@@ -29,15 +29,15 @@ export default async function AdminLayout({
         <span className="brand">AI Studio · {app}</span>
         {allowed && (
           <nav>
-            <Link href={`/admin/${app}/knowledge`}>Pengetahuan</Link>
-            <Link href={`/admin/${app}/assistant`}>Asisten</Link>
-            <Link href={`/admin/${app}/insights`}>Insight</Link>
+            <Link href={`/admin/${app}/knowledge`}>Knowledge</Link>
+            <Link href={`/admin/${app}/assistant`}>Assistant</Link>
+            <Link href={`/admin/${app}/insights`}>Insights</Link>
           </nav>
         )}
         <span className="muted">{email}</span>
         <form action={logout}>
           <button type="submit" className="secondary">
-            Keluar
+            Sign out
           </button>
         </form>
       </header>
@@ -47,9 +47,9 @@ export default async function AdminLayout({
         <div className="card">
           <SignOutOnMount app={app} />
           <p className="error" role="alert">
-            Akun ini tidak memiliki akses ke {app}
+            This account does not have access to {app}
           </p>
-          <Link href="/login">Kembali ke halaman masuk</Link>
+          <Link href="/login">Back to sign in</Link>
         </div>
       )}
     </div>

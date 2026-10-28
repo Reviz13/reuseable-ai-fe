@@ -29,7 +29,7 @@ export async function saveAssistant(app: string, _prev: FormState, fd: FormData)
   return runAction(async () => {
     await aiAdmin(`/admin/${appId}/assistant`, { method: "PUT", body: JSON.stringify(config) });
     revalidatePath(`/admin/${appId}/assistant`);
-    return { ok: true, message: "Konfigurasi disimpan." };
+    return { ok: true, message: "Configuration saved." };
   });
 }
 
@@ -37,15 +37,15 @@ export async function uploadAvatar(app: string, state: string, _prev: FormState,
   const appId = parseApp(app);
   const s = AvatarStateSchema.parse(state);
   const file = fd.get("file");
-  if (!(file instanceof File) || file.size === 0) return { error: "Pilih gambar terlebih dahulu." };
+  if (!(file instanceof File) || file.size === 0) return { error: "Choose an image first." };
   return runAction(
     async () => {
       const body = new FormData();
       body.set("file", file, file.name);
       await aiAdmin(`/admin/${appId}/avatar/${s}`, { method: "PUT", body });
       revalidatePath(`/admin/${appId}/assistant`);
-      return { ok: true, message: "Avatar diperbarui." };
+      return { ok: true, message: "Avatar updated." };
     },
-    { 413: "Gambar terlalu besar (maksimal 5 MB).", 415: "Gunakan gambar PNG, WebP, atau JPG." },
+    { 413: "Image is too large (max 5 MB).", 415: "Use a PNG, WebP, or JPG image." },
   );
 }

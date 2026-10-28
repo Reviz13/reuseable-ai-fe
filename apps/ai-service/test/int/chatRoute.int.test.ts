@@ -9,7 +9,7 @@ import { PublicAssistantSchema, SseEventSchema, type ProfitReport, type SseEvent
 import { createApp, type AppDeps } from "../../src/app.js";
 import { createEndUserVerifier } from "../../src/auth/endUser.js";
 import { createMemoryBlobStore } from "../../src/blob.js";
-import { NOT_FOUND, RATE_LIMITED, TOO_LONG } from "../../src/copy.js";
+import { copyFor, RATE_LIMITED, TOO_LONG } from "../../src/copy.js";
 import { createFakeAdapter } from "../../src/llm/fake.js";
 import { LlmUnavailableError, type LlmAdapter, type LlmChunk, type LlmRequest } from "../../src/llm/types.js";
 import { createHashEmbedder } from "../../src/rag/embedder.js";
@@ -219,8 +219,8 @@ describe("POST /v1/chat", () => {
     expect((await chat(app, { message: "x" }, await token("rl-other"))).statusCode).toBe(200);
   });
 
-  it("NOT_FOUND answer without tools inserts a knowledge_gaps row", async () => {
-    const llm = always([{ type: "text", text: NOT_FOUND }, { type: "end", stop: "end_turn" }]);
+  it("NOT_FOUND answer without tools inserts a knowledge_gaps row (seeded assistant is English)", async () => {
+    const llm = always([{ type: "text", text: copyFor("en").NOT_FOUND }, { type: "end", stop: "end_turn" }]);
     const app = await makeApp(llm);
     const res = await chat(app, { message: "jam buka toko?" });
     const events = parseSse(res.body);
