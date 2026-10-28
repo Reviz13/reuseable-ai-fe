@@ -366,7 +366,7 @@ describe("GET /v1/assistants/:app/public", () => {
     expect(res.statusCode).toBe(200);
     expect(res.headers["access-control-allow-origin"]).toBe(ORIGIN);
     const body = PublicAssistantSchema.parse(res.json());
-    expect(body).toMatchObject({ app: "pos", name: "Tepi", theme: { accent: "#6d4aff" } });
+    expect(body).toMatchObject({ app: "pos", name: "NEXUS", theme: { accent: "#6d4aff" } });
     expect(body.avatar_frames.idle).toBe("memory://avatars/pos/idle.webp?v=3");
     expect(body.avatar_frames.sad).toBe("http://ai.test:4000/widget/v1/avatar/sad.webp");
     expect(Object.keys(body.avatar_frames).sort()).toEqual(["happy", "idle", "sad", "talking", "thinking"]);

@@ -41,12 +41,12 @@ Copy `.env.example` to `.env` at the repo root. `pnpm dev` loads this one file f
 | `APP_ISSUERS` | ai-service | JSON map of app to JWKS URL, e.g. `{"pos":"http://localhost:4100/.well-known/jwks.json"}`. |
 | `POS_BASE_URL` | ai-service | `http://localhost:4100` for mock-pos. |
 | `POS_INTERNAL_KEY` | ai-service | **Must equal `INTERNAL_KEY`** (mock-pos). |
-| `INTERNAL_KEY` | mock-pos | Shared secret for `/internal/reports/profit`. |
+| `INTERNAL_KEY` | mock-pos | Shared secret for `/internal/reports/profit` and `/internal/reports/daily` (the demo dashboard feed). |
 | `ANTHROPIC_API_KEY` | ai-service | Default adapter `claude`. Optional `OPENAI_COMPAT_BASE_URL` / `OPENAI_COMPAT_API_KEY` fallback. |
 | `WIDGET_DIR` | ai-service | Built widget served at `/widget/v1/`. Default `../../packages/widget/dist`. |
 | `AI_SERVICE_URL`, `MOCK_POS_URL` | studio | `http://localhost:4000`, `http://localhost:4100`. |
-| `DEMO_ENABLED` | studio | `/api/demo-token` issues tokens to anyone. Off in production unless set to `1`. |
-| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | scripts | Dev admin for `pnpm seed:admin` / `pnpm seed:avatars`. Choose your own. |
+| `DEMO_ENABLED` | studio | `/api/demo-token` issues tokens to anyone and `/api/demo-dashboard` serves owner figures (with `POS_INTERNAL_KEY`). Both are off in production unless set to `1`. |
+| `SEED_ADMIN_EMAIL`, `SEED_ADMIN_PASSWORD` | scripts | Dev admin for `pnpm seed:admin` / `pnpm seed:avatars` / `pnpm seed:knowledge`. Choose your own. |
 | `NODE_ENV`, `LOCAL_MODE`, `LLM_FAKE_SCRIPT` | ai-service | See [LOCAL_MODE](#local_mode). |
 
 **Escape `$` in values.** dotenv-cli expands variables (dotenv-expand), so a password such as `pa$word` must be written `pa\$word`, or `$word` is replaced by an empty string.
@@ -57,6 +57,7 @@ Copy `.env.example` to `.env` at the repo root. `pnpm dev` loads this one file f
 2. Apply `supabase/migrations/0001` to `0005` in order (SQL editor or `supabase db push`), then run `supabase/seed.sql` (the `pos` assistant, allowed origin `http://localhost:3000`).
 3. `pnpm seed:admin`: creates `SEED_ADMIN_EMAIL` through the Admin API and grants it the `pos` app in `admins` (merging with any apps it already has).
 4. With `pnpm dev` running: `pnpm seed:avatars` uploads `assets/avatar/pos/*.webp` through the admin API.
+5. With `pnpm dev` running: `pnpm seed:knowledge` uploads `assets/knowledge/pos/*.md` (demo knowledge for Kopi Tepi: menu, SOPs, promos, troubleshooting, NEXUS) and waits until each is ingested. Re-running adds a new version only for changed files.
 
 RLS is enabled on every table with no policies; only ai-service (service role) reads or writes data. `audit_log` is append-only: UPDATE, DELETE and TRUNCATE are revoked and blocked by triggers.
 
@@ -70,7 +71,7 @@ Builds the widget, then starts:
 
 | App | URL |
 |---|---|
-| studio | http://localhost:3000. `/demo/pos` is the demo POS with the widget (switch owner/cashier). `/login` is the admin Studio. |
+| studio | http://localhost:3000. `/demo/pos` is the demo POS with the widget (switch owner/cashier): a local-only cashier and an owner sales dashboard. `/login` is the admin Studio. |
 | ai-service | http://localhost:4000 (`/healthz`, `/widget/v1/ai-assistant.js`). |
 | mock-pos | http://localhost:4100. |
 
@@ -109,7 +110,7 @@ The host backend signs a 10-minute RS256 JWT (`iss` = app, `aud: "ai-platform"`,
 </script>
 ```
 
-Attributes `app`, `api`, `position`, `open`, `lang`; methods `open()`, `close()`, `ask(text)`; events `ai-open`, `ai-close`, `ai-message`, `ai-error`. See spec §8.
+Attributes `app`, `api`, `position`, `open`, `lang`, `suggestions` (pipe-separated quick questions for an empty panel); methods `open()`, `close()`, `ask(text)`; events `ai-open`, `ai-close`, `ai-message`, `ai-error`. See spec §8.
 
 ## Deploy notes
 
@@ -121,6 +122,8 @@ Attributes `app`, `api`, `position`, `open`, `lang`; methods `open()`, `close()`
 - Database TLS: verified by default for remote hosts; provide `DATABASE_SSL_CA`.
 
 ## Known limitations
+
+- Knowledge-grounded amounts: outside profit context and with no tool call, a Rupiah amount in an answer passes only when the retrieved knowledge (chunks at or above `min_score`) states the same value, so menu prices and promo thresholds can be quoted. A knowledge document is therefore trusted to state its own prices; profit-context turns never use this.
 
 - The guardrail checks digits only. Number words ("sembilan juta") and Arabic-Indic or other non-ASCII digit systems are not checked.
 - Profit context from history only looks at the latest previous user message; a follow-up two turns after a profit question is not treated as profit context.

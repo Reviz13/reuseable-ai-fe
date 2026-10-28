@@ -61,7 +61,7 @@ describe("db", () => {
     const [a] = await db.query<{ name: string; min_score: number; allowed_origins: string[] }>(
       "select name, min_score, allowed_origins from assistants where app = 'pos'",
     );
-    expect(a).toMatchObject({ name: "Tepi", min_score: 0.78, allowed_origins: ["http://localhost:3000"] });
+    expect(a).toMatchObject({ name: "NEXUS", min_score: 0.78, allowed_origins: ["http://localhost:3000"] });
   });
 
   it("match_chunks isolates apps", async () => {

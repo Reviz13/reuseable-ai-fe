@@ -1088,3 +1088,66 @@ describe("runChat: N1/N2 tag-kept text and markdown link text (9.999.000 must ne
     );
   });
 });
+
+describe("runChat: knowledge-grounded amounts (prices from the retrieved docs)", () => {
+  const fresh = () => new AbortController().signal;
+  const menu: RetrievedChunk = {
+    ...chunk("m1", "menu", 0.9, "Kopi"),
+    content: "Cappuccino Rp28.000: espresso dengan susu. Member dapat diskon 10% untuk transaksi minimal Rp50.000.",
+  };
+
+  it("a price that appears verbatim in a retrieved doc is answered as written", async () => {
+    const llm = createFakeAdapter([[text("Harga Cappuccino Rp28.000 per gelas."), end()]]);
+    const s = setup({ llm, chunks: [menu] });
+    const r = await runChat(s.deps, input("cashier", "Berapa harga cappuccino?"), s.emit, fresh());
+    expect(r!.text).toBe("Harga Cappuccino Rp28.000 per gelas.");
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.citations.map((c) => c.document_id)).toEqual(["menu"]);
+  });
+
+  it("other forms of the same documented amount pass too (28 ribu, Rp 50.000)", async () => {
+    const llm = createFakeAdapter([[text("Cappuccino 28 ribu; diskon member 10% mulai Rp 50.000."), end()]]);
+    const s = setup({ llm, chunks: [menu] });
+    const r = await runChat(s.deps, input("owner", "Harga cappuccino dan promo member?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(false);
+    expect(r!.text).toContain("28 ribu");
+  });
+
+  it("an amount that is not in the docs is still replaced", async () => {
+    const llm = createFakeAdapter([[text("Harga Cappuccino Rp30.000."), end()]]);
+    const s = setup({ llm, chunks: [menu] });
+    const r = await runChat(s.deps, input("owner", "Berapa harga cappuccino?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).toBe(NO_DATA);
+    for (const t of tokens(s.events)) expect(t).not.toContain("30.000");
+  });
+
+  it("docs never vouch for figures in a profit-context turn", async () => {
+    const llm = createFakeAdapter([[text("Profit hari ini Rp28.000."), end()]]);
+    const s = setup({ llm, chunks: [menu] });
+    const r = await runChat(s.deps, input("owner", "Profit hari ini?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(true);
+    expect(r!.text).toBe(NO_DATA);
+  });
+
+  it("a documented amount in an answer that talks about profit is still replaced", async () => {
+    const llm = createFakeAdapter([[text("Profit dari Cappuccino Rp28.000."), end()]]);
+    const s = setup({ llm, chunks: [menu] });
+    const r = await runChat(s.deps, input("owner", "Cappuccino gimana?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(true);
+  });
+
+  it("chunks below min_score never vouch for an amount", async () => {
+    const llm = createFakeAdapter([[text("Harga Cappuccino Rp28.000."), end()]]);
+    const s = setup({ llm, chunks: [{ ...menu, score: 0.5 }] });
+    const r = await runChat(s.deps, input("owner", "Berapa harga cappuccino?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(true);
+  });
+
+  it("an unparseable currency form fails closed even when the docs hold amounts", async () => {
+    const llm = createFakeAdapter([[text("Harga Cappuccino Rp 28.000.000.0."), end()]]);
+    const s = setup({ llm, chunks: [menu] });
+    const r = await runChat(s.deps, input("owner", "Berapa harga cappuccino?"), s.emit, fresh());
+    expect(r!.guardrailReplaced).toBe(true);
+  });
+});

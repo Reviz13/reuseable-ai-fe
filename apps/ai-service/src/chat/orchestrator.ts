@@ -91,6 +91,20 @@ export function normalizeHistory(messages: { role: "user" | "assistant"; content
   return out;
 }
 
+/**
+ * Amounts the retrieved knowledge itself states (menu prices, promo thresholds). Parsed with candidates
+ * on, so every number form the guardrail could find in an answer is covered.
+ */
+function knowledgeAmounts(chunks: RetrievedChunk[]): Set<number> {
+  const values = new Set<number>();
+  for (const c of chunks) {
+    for (const a of parseGuardrailAmounts(c.content, { profitContext: true })) {
+      if (!Number.isNaN(a.value)) values.add(a.value);
+    }
+  }
+  return values;
+}
+
 function failureCopy(toolCalls: ToolCallRecord[]): string {
   const codes = toolCalls.filter((t) => t.name === "get_profit" && !t.ok).map((t) => t.code);
   if (codes.includes("FORBIDDEN")) return FORBIDDEN;
@@ -214,11 +228,17 @@ export async function runChat(
       guardrailReplaced = g.replaced;
       if (g.replaced) emitReplacement(g.text);
       else emitText(g.text);
-    } else if (parseGuardrailAmounts(held, { profitContext: profitContext || mentionsCurrency(held) }).length > 0) {
-      guardrailReplaced = noDataReplaced = true;
-      emitReplacement(failureCopy(toolCalls));
     } else {
-      emitText(held);
+      const amounts = parseGuardrailAmounts(held, { profitContext: profitContext || mentionsCurrency(held) });
+      // Outside profit context and without tool calls, an amount the relevant docs state verbatim is
+      // grounded (a price, a promo threshold); anything else, or any unparsed form, still fails closed.
+      const known = !profitContext && toolCalls.length === 0 ? knowledgeAmounts(relevant) : new Set<number>();
+      if (amounts.some((a) => !known.has(a.value))) {
+        guardrailReplaced = noDataReplaced = true;
+        emitReplacement(failureCopy(toolCalls));
+      } else {
+        emitText(held);
+      }
     }
   }
   const empty = text.trim() === "";
