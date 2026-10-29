@@ -1,0 +1,403 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>NEXUS — Features</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap">
+<style>
+  @page { size: 1280px 720px; margin: 0; }
+  :root {
+    --ink: #0f172a; --text: #1e293b; --muted: #5b6474; --line: #e3e7ef;
+    --bg: #f5f6fb; --card: #ffffff; --accent: #6d4aff; --accent-deep: #4a2fc4; --accent-soft: #eee9ff;
+    --dark: #0f172a; --dark-2: #1b2540; --on-dark: #e8ebf3; --on-dark-muted: #9aa6bf;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { background: #555; }
+  body { font-family: Inter, "Segoe UI", Arial, sans-serif; color: var(--text); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .slide { width: 1280px; height: 720px; position: relative; overflow: hidden; background: var(--bg); padding: 64px 72px 72px; display: flex; flex-direction: column; page-break-after: always; break-after: page; }
+  .slide.dark { background: var(--dark); color: var(--on-dark); }
+  .eyebrow { font-size: 15px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; color: var(--accent); margin-bottom: 12px; }
+  .dark .eyebrow { color: #a99bff; }
+  h1 { font-size: 72px; font-weight: 800; line-height: 1.05; letter-spacing: -.02em; color: var(--ink); }
+  h2 { font-size: 40px; font-weight: 800; line-height: 1.12; letter-spacing: -.015em; color: var(--ink); }
+  .dark h1, .dark h2 { color: #fff; }
+  h3 { font-size: 20px; font-weight: 700; color: var(--ink); margin-bottom: 6px; }
+  p, li { font-size: 17px; line-height: 1.5; color: var(--muted); }
+  .dark p, .dark li { color: var(--on-dark-muted); }
+  .lead { font-size: 21px; line-height: 1.5; color: var(--muted); max-width: 900px; margin-top: 14px; }
+  .foot { position: absolute; left: 72px; right: 72px; bottom: 28px; display: flex; justify-content: space-between; font-size: 13px; color: #8a93a5; }
+  .dark .foot { color: #66728c; }
+  .grow { flex: 1; min-height: 0; }
+  .cards { display: grid; gap: 18px; margin-top: 30px; }
+  .c2 { grid-template-columns: repeat(2, 1fr); } .c3 { grid-template-columns: repeat(3, 1fr); } .c4 { grid-template-columns: repeat(4, 1fr); }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 16px; padding: 22px 24px; box-shadow: 0 1px 2px rgba(15,23,42,.04); }
+  .card .ic { width: 40px; height: 40px; border-radius: 10px; background: var(--accent-soft); display: grid; place-items: center; font-size: 20px; margin-bottom: 12px; }
+  .card p { font-size: 15.5px; }
+  .dark .card { background: var(--dark-2); border-color: #2a3654; }
+  .dark .card h3 { color: #fff; }
+  .split { display: grid; grid-template-columns: 1fr 1.45fr; gap: 44px; margin-top: 26px; flex: 1; min-height: 0; }
+  .split.rev { grid-template-columns: 1.45fr 1fr; }
+  .shot { width: 100%; height: 100%; object-fit: cover; object-position: left top; border-radius: 14px; border: 1px solid var(--line); box-shadow: 0 18px 40px -16px rgba(15,23,42,.35); }
+  .shot-wrap { min-height: 0; }
+  ul.ticks { list-style: none; display: flex; flex-direction: column; gap: 12px; }
+  ul.ticks li { padding-left: 30px; position: relative; color: var(--text); }
+  ul.ticks li::before { content: ""; position: absolute; left: 0; top: 6px; width: 16px; height: 16px; border-radius: 50%; background: var(--accent); box-shadow: inset 0 0 0 4px var(--accent-soft); }
+  ul.ticks li b { color: var(--ink); }
+  .pill { display: inline-block; font-size: 13px; font-weight: 600; padding: 4px 10px; border-radius: 999px; background: var(--accent-soft); color: var(--accent-deep); }
+  table { border-collapse: collapse; width: 100%; font-size: 16px; }
+  th { text-align: left; font-size: 13px; letter-spacing: .08em; text-transform: uppercase; color: var(--muted); padding: 10px 14px; border-bottom: 2px solid var(--line); }
+  td { padding: 11px 14px; border-bottom: 1px solid var(--line); color: var(--text); vertical-align: top; }
+  td code, p code, li code { font-family: "JetBrains Mono", Consolas, monospace; font-size: .9em; background: var(--accent-soft); color: var(--accent-deep); padding: 1px 6px; border-radius: 6px; }
+  .big { font-size: 56px; font-weight: 800; color: var(--accent); line-height: 1; letter-spacing: -.02em; }
+</style>
+</head>
+<body>
+
+<!-- 1 Cover -->
+<section class="slide dark" style="justify-content:center">
+  <div style="position:absolute;right:-120px;top:-120px;width:620px;height:620px;border-radius:50%;background:radial-gradient(circle at 40% 40%, #6d4aff 0%, rgba(109,74,255,.25) 45%, rgba(15,23,42,0) 70%)"></div>
+  <img src="../../assets/avatar/pos/happy.webp" alt="NEXUS avatar" style="position:absolute;right:110px;top:150px;width:360px;height:360px;object-fit:contain">
+  <div class="eyebrow">Hitachi · Reusable AI Micro Frontend</div>
+  <h1 style="font-size:96px">NEXUS</h1>
+  <p class="lead" style="color:#c4cbe0;max-width:640px;font-size:26px">One AI assistant every internal app can embed.<br>Pilot: Hitachi POS at Kopi Tepi.</p>
+  <div style="display:flex;gap:10px;margin-top:34px">
+    <span class="pill" style="background:#262f52;color:#cfc6ff">Knowledge answers</span>
+    <span class="pill" style="background:#262f52;color:#cfc6ff">Profit reports</span>
+    <span class="pill" style="background:#262f52;color:#cfc6ff">Admin Studio</span>
+  </div>
+  <div class="foot"><span>Feature overview · October 2026</span><span>Branch feat/pos-pilot</span></div>
+</section>
+
+<!-- 2 What it is -->
+<section class="slide">
+  <div class="eyebrow">The idea</div>
+  <h2>One widget, many apps, each with its own brain</h2>
+  <p class="lead">Each app (POS, Core Banking, ERP/HRIS) is a tenant with isolated knowledge, tools, persona and avatar. POS is the pilot.</p>
+  <div class="cards c3">
+    <div class="card"><div class="ic">📚</div><h3>Answers from knowledge</h3><p>SOPs, manuals and FAQs managed by admins. Every answer cites its source documents.</p></div>
+    <div class="card"><div class="ic">📈</div><h3>Reports profit</h3><p>Today, yesterday, this/last week, this/last month or a custom range. Owners only.</p></div>
+    <div class="card"><div class="ic">😺</div><h3>Shows how it feels</h3><p>A character avatar whose expression follows the conversation: idle, thinking, talking, happy, sad.</p></div>
+  </div>
+  <div class="card" style="margin-top:18px;display:flex;gap:16px;align-items:center;background:var(--accent-soft);border-color:#ddd3ff">
+    <div style="font-size:26px">🔒</div>
+    <p style="color:var(--accent-deep);font-size:17px"><b>Read-only by design.</b> NEXUS never writes to an application database, and profit is calculated by the POS backend, never by the model.</p>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>2</span></div>
+</section>
+
+<!-- 3 Architecture -->
+<section class="slide">
+  <div class="eyebrow">Architecture</div>
+  <h2>Three services and one embeddable widget</h2>
+  <svg viewBox="0 0 1136 470" style="width:1136px;height:470px;margin-top:22px" font-family="Inter, Segoe UI, Arial, sans-serif">
+    <defs><marker id="a" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto"><path d="M0 0L10 5L0 10z" fill="#8a93a5"/></marker></defs>
+    <!-- host -->
+    <rect x="0" y="20" width="250" height="150" rx="14" fill="#fff" stroke="#e3e7ef"/>
+    <text x="20" y="52" font-size="17" font-weight="700" fill="#0f172a">Host app</text>
+    <text x="20" y="76" font-size="14" fill="#5b6474">POS demo today;</text>
+    <text x="20" y="96" font-size="14" fill="#5b6474">Banking / ERP later</text>
+    <rect x="20" y="112" width="210" height="40" rx="10" fill="#eee9ff"/>
+    <text x="34" y="137" font-size="14" font-weight="600" fill="#4a2fc4">&lt;ai-assistant&gt; widget</text>
+    <!-- studio -->
+    <rect x="0" y="290" width="250" height="150" rx="14" fill="#fff" stroke="#e3e7ef"/>
+    <text x="20" y="322" font-size="17" font-weight="700" fill="#0f172a">Admin Studio</text>
+    <text x="20" y="346" font-size="14" fill="#5b6474">Next.js · Supabase login</text>
+    <text x="20" y="368" font-size="14" fill="#5b6474">Knowledge · Assistant ·</text>
+    <text x="20" y="388" font-size="14" fill="#5b6474">Insights</text>
+    <!-- ai-service -->
+    <rect x="370" y="0" width="390" height="470" rx="16" fill="#0f172a"/>
+    <text x="394" y="36" font-size="18" font-weight="700" fill="#fff">ai-service</text>
+    <text x="394" y="58" font-size="14" fill="#9aa6bf">Fastify · the only database client</text>
+    <g font-size="14" fill="#e8ebf3">
+      <rect x="394" y="78" width="342" height="44" rx="10" fill="#1b2540"/><text x="410" y="105"><tspan font-weight="700">auth</tspan>  JWT per app (JWKS), admin JWT</text>
+      <rect x="394" y="130" width="342" height="44" rx="10" fill="#1b2540"/><text x="410" y="157"><tspan font-weight="700">orchestrator</tspan>  history → LLM → tools → SSE</text>
+      <rect x="394" y="182" width="342" height="44" rx="10" fill="#1b2540"/><text x="410" y="209"><tspan font-weight="700">tools</tspan>  pos.get_profit (read-only)</text>
+      <rect x="394" y="234" width="342" height="44" rx="10" fill="#1b2540"/><text x="410" y="261"><tspan font-weight="700">retriever + ingestion</tspan>  RAG</text>
+      <rect x="394" y="286" width="342" height="44" rx="10" fill="#1b2540"/><text x="410" y="313"><tspan font-weight="700">guardrail</tspan>  numbers must match tools</text>
+      <rect x="394" y="338" width="342" height="44" rx="10" fill="#1b2540"/><text x="410" y="365"><tspan font-weight="700">LLM gateway</tspan>  Claude | OpenAI-compatible</text>
+      <rect x="394" y="390" width="342" height="44" rx="10" fill="#1b2540"/><text x="410" y="417"><tspan font-weight="700">admin API</tspan>  knowledge, config, audit</text>
+    </g>
+    <!-- right side -->
+    <rect x="886" y="20" width="250" height="120" rx="14" fill="#fff" stroke="#e3e7ef"/>
+    <text x="906" y="52" font-size="17" font-weight="700" fill="#0f172a">Supabase</text>
+    <text x="906" y="76" font-size="14" fill="#5b6474">Postgres + pgvector,</text>
+    <text x="906" y="96" font-size="14" fill="#5b6474">Storage, Auth · RLS on</text>
+    <rect x="886" y="175" width="250" height="120" rx="14" fill="#fff" stroke="#e3e7ef"/>
+    <text x="906" y="207" font-size="17" font-weight="700" fill="#0f172a">LLM</text>
+    <text x="906" y="231" font-size="14" fill="#5b6474">Claude, or self-hosted</text>
+    <text x="906" y="251" font-size="14" fill="#5b6474">(LM Studio, Ollama, vLLM)</text>
+    <rect x="886" y="330" width="250" height="120" rx="14" fill="#fff" stroke="#e3e7ef"/>
+    <text x="906" y="362" font-size="17" font-weight="700" fill="#0f172a">POS backend</text>
+    <text x="906" y="386" font-size="14" fill="#5b6474">mock-pos for the MVP;</text>
+    <text x="906" y="406" font-size="14" fill="#5b6474">real POS swapped by config</text>
+    <!-- arrows -->
+    <g stroke="#8a93a5" stroke-width="2" fill="none" marker-end="url(#a)">
+      <path d="M250 95 H366"/><path d="M250 365 H366"/>
+      <path d="M760 80 H882"/><path d="M760 235 H882"/><path d="M760 390 H882"/>
+    </g>
+    <g font-size="12.5" fill="#5b6474">
+      <text x="262" y="86">SSE chat + JWT</text><text x="262" y="356">admin API</text>
+      <text x="772" y="72">service role</text><text x="772" y="227">prompt + tools</text><text x="772" y="382">GET profit</text>
+    </g>
+  </svg>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>3</span></div>
+</section>
+
+<!-- 4 Widget -->
+<section class="slide">
+  <div class="eyebrow">The widget</div>
+  <h2>Drop-in for any web app: one tag, one script</h2>
+  <div class="cards c4" style="margin-top:28px">
+    <div class="card"><div class="ic">🧩</div><h3>Web Component</h3><p>Preact inside Shadow DOM, one JS file. Host styles never leak in or out.</p></div>
+    <div class="card"><div class="ic">📍</div><h3>Four corners</h3><p>Drag the launcher to snap to any corner; the choice is remembered per app.</p></div>
+    <div class="card"><div class="ic">⚡</div><h3>Streaming</h3><p>Answers stream token by token over SSE, rendered as safe markdown.</p></div>
+    <div class="card"><div class="ic">🔖</div><h3>Citations</h3><p>Source documents appear as chips under each knowledge answer.</p></div>
+    <div class="card"><div class="ic">👍</div><h3>Feedback</h3><p>Thumbs up/down on every answer, reviewed by admins in Insights.</p></div>
+    <div class="card"><div class="ic">💬</div><h3>Suggestions</h3><p>Quick questions and a friendly nudge to start; configurable per host.</p></div>
+    <div class="card"><div class="ic">🎨</div><h3>Themeable</h3><p>Accent, name, avatar from Studio; insets, z-index via CSS variables.</p></div>
+    <div class="card"><div class="ic">🔑</div><h3>Keyless</h3><p>Host signs a short-lived JWT; on 401 the widget refreshes it once.</p></div>
+  </div>
+  <p style="margin-top:22px;font-size:15px"><code>&lt;ai-assistant app="pos" api="…" position="bottom-right"&gt;</code> · methods <code>open()</code> <code>close()</code> <code>ask(text)</code> · events <code>ai-open</code> <code>ai-message</code> <code>ai-error</code></p>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>4</span></div>
+</section>
+
+<!-- 5 Profit answer -->
+<section class="slide">
+  <div class="eyebrow">Profit for the owner</div>
+  <h2>“Profit this week?” gets the POS’s own numbers</h2>
+  <div class="split">
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <ul class="ticks">
+        <li><b>One read-only tool</b>, <code>pos.get_profit</code>, calls the POS report; the model never calculates.</li>
+        <li><b>Number guardrail:</b> every rupiah amount in the answer must equal a tool value, or the whole answer is replaced by a safe template.</li>
+        <li><b>Honest caveats:</b> items sold without COGS are always called out.</li>
+        <li><b>Every call audited</b>, including refused and failed ones.</li>
+      </ul>
+    </div>
+    <div class="shot-wrap"><img class="shot" src="img/nexus-profit-crop.png" alt="NEXUS answering the owner's profit question" style="width:auto;max-width:100%;height:100%;object-fit:contain"></div>
+  </div>
+  <div class="foot"><span>Live answer from the running demo (local LLM)</span><span>5</span></div>
+</section>
+
+<!-- 6 Profit rules -->
+<section class="slide">
+  <div class="eyebrow">Profit tool rules</div>
+  <h2>Who, when and how much is decided in code</h2>
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:40px;margin-top:28px">
+    <table>
+      <tr><th style="width:42%">Period</th><th>Range</th></tr>
+      <tr><td>today / yesterday</td><td>one day in the outlet’s time zone</td></tr>
+      <tr><td>this_week / last_week</td><td>weeks start Monday; this week runs to now</td></tr>
+      <tr><td>this_month / last_month</td><td>calendar months</td></tr>
+      <tr><td>custom</td><td>up to 92 days, never in the future</td></tr>
+    </table>
+    <div class="cards" style="margin-top:0;gap:14px">
+      <div class="card"><h3>Owner only</h3><p>Role, outlet and time zone come from the verified token. The model cannot pass them, so prompt text cannot change them.</p></div>
+      <div class="card"><h3>Resilient</h3><p>5 s timeout with one retry. Bad ranges return <code>INVALID_PERIOD</code> and NEXUS asks to rephrase.</p></div>
+      <div class="card"><h3>Time zones</h3><p>WIB, WITA and WIT outlets resolve their own “today”.</p></div>
+    </div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>6</span></div>
+</section>
+
+<!-- 7 Knowledge answer -->
+<section class="slide">
+  <div class="eyebrow">Knowledge answers</div>
+  <h2>Step-by-step SOPs, with their sources</h2>
+  <div class="split rev">
+    <div class="shot-wrap"><img class="shot" src="img/nexus-knowledge-crop.png" alt="NEXUS explaining the refund SOP with citation chips" style="width:auto;max-width:100%;height:100%;object-fit:contain"></div>
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <ul class="ticks">
+        <li><b>Retrieval-augmented:</b> the question is matched against active document chunks for this app only.</li>
+        <li><b>Citations</b> show exactly which SOP or FAQ the answer came from.</li>
+        <li><b>“I don’t know” is allowed:</b> below the score threshold NEXUS says so and logs a knowledge gap.</li>
+        <li><b>Injection-safe:</b> document text is treated as data, never as instructions.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>Live answer: “How do I refund a transaction?”</span><span>7</span></div>
+</section>
+
+<!-- 8 Knowledge pipeline -->
+<section class="slide">
+  <div class="eyebrow">Knowledge pipeline</div>
+  <h2>Upload a document, and NEXUS knows it, no redeploy</h2>
+  <div style="display:flex;align-items:center;gap:12px;margin-top:34px">
+    <div class="card" style="flex:1;text-align:center"><h3>Upload</h3><p>PDF, DOCX, MD, TXT or a typed FAQ</p></div><div style="font-size:26px;color:#8a93a5">→</div>
+    <div class="card" style="flex:1;text-align:center"><h3>Parse</h3><p>pdf-parse, mammoth</p></div><div style="font-size:26px;color:#8a93a5">→</div>
+    <div class="card" style="flex:1;text-align:center"><h3>Chunk</h3><p>~500 tokens, split on headings</p></div><div style="font-size:26px;color:#8a93a5">→</div>
+    <div class="card" style="flex:1;text-align:center"><h3>Embed</h3><p>local multilingual-e5-small</p></div><div style="font-size:26px;color:#8a93a5">→</div>
+    <div class="card" style="flex:1;text-align:center;background:var(--accent-soft);border-color:#ddd3ff"><h3>Ready</h3><p>new version goes live</p></div>
+  </div>
+  <div class="cards c3" style="margin-top:26px">
+    <div class="card"><h3>Versioned</h3><p>Every re-upload or FAQ edit is a new version. Activate or roll back with one click.</p></div>
+    <div class="card"><h3>Stays in-house</h3><p>Embeddings run inside ai-service, so documents are not sent out for indexing.</p></div>
+    <div class="card"><h3>Demo-ready</h3><p>13 Kopi Tepi knowledge docs load with <code>pnpm seed:knowledge</code>.</p></div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>8</span></div>
+</section>
+
+<!-- 9 Avatar -->
+<section class="slide dark">
+  <div class="eyebrow">Avatar</div>
+  <h2>An expression for every moment</h2>
+  <p class="lead" style="color:#9aa6bf">The server drives the state; the widget cross-fades the frames. Each app can upload its own character in Admin Studio.</p>
+  <div style="display:grid;grid-template-columns:repeat(5,1fr);gap:18px;margin-top:36px">
+    <div class="card" style="text-align:center"><img src="../../assets/avatar/pos/idle.webp" alt="idle" style="width:150px;height:150px;object-fit:contain"><h3 style="margin-top:8px">Idle</h3><p>waiting</p></div>
+    <div class="card" style="text-align:center"><img src="../../assets/avatar/pos/thinking.webp" alt="thinking" style="width:150px;height:150px;object-fit:contain"><h3 style="margin-top:8px">Thinking</h3><p>tool running</p></div>
+    <div class="card" style="text-align:center"><img src="../../assets/avatar/pos/talking.webp" alt="talking" style="width:150px;height:150px;object-fit:contain"><h3 style="margin-top:8px">Talking</h3><p>streaming</p></div>
+    <div class="card" style="text-align:center"><img src="../../assets/avatar/pos/happy.webp" alt="happy" style="width:150px;height:150px;object-fit:contain"><h3 style="margin-top:8px">Happy</h3><p>answered with data</p></div>
+    <div class="card" style="text-align:center"><img src="../../assets/avatar/pos/sad.webp" alt="sad" style="width:150px;height:150px;object-fit:contain"><h3 style="margin-top:8px">Sad</h3><p>refused or unknown</p></div>
+  </div>
+  <div class="foot"><span>Reduced-motion users get still frames</span><span>9</span></div>
+</section>
+
+<!-- 10 POS cashier -->
+<section class="slide">
+  <div class="eyebrow">POS demo · Cashier</div>
+  <h2>Kopi Tepi: a realistic POS to host NEXUS</h2>
+  <div class="split">
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <ul class="ticks">
+        <li><b>Menu grid</b> with search and Coffee / Non-coffee / Food filters.</li>
+        <li><b>Order panel</b> with quantities, 11% VAT, cash or QRIS, quick cash amounts and a receipt.</li>
+        <li><b>Dark sidebar</b> with role switch (Owner / Cashier) and session totals.</li>
+        <li><b>Ask NEXUS</b> from the sidebar or the floating launcher.</li>
+      </ul>
+    </div>
+    <div class="shot-wrap"><img class="shot" src="img/pos-cashier.png" alt="POS cashier screen with three items in the cart"></div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>10</span></div>
+</section>
+
+<!-- 11 Dashboard -->
+<section class="slide">
+  <div class="eyebrow">POS demo · Owner dashboard</div>
+  <h2>Sales, COGS and profit at a glance</h2>
+  <div class="split rev">
+    <div class="shot-wrap"><img class="shot" src="img/pos-dashboard.png" alt="Owner sales dashboard"></div>
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <ul class="ticks">
+        <li><b>KPI cards</b> with change vs the previous period and margin.</li>
+        <li><b>Ranges:</b> Today, 7 days, 30 days or a custom date range.</li>
+        <li><b>Daily chart</b> of sales and profit, with a table view.</li>
+        <li><b>Top products</b> and <b>payment methods</b>.</li>
+        <li><b>Missing-COGS warning</b>, same rule NEXUS follows.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>11</span></div>
+</section>
+
+<!-- 12 Roles -->
+<section class="slide">
+  <div class="eyebrow">Role-based access</div>
+  <h2>Cashiers can ask how, not how much</h2>
+  <div class="split">
+    <div style="display:flex;flex-direction:column;justify-content:center">
+      <ul class="ticks">
+        <li><b>Dashboard locks</b> for the cashier role.</li>
+        <li><b>NEXUS refuses</b> a cashier’s profit question: “Only the owner can view profit.”</li>
+        <li><b>The refusal is audited</b> with <code>outcome=forbidden</code>.</li>
+        <li><b>SOP questions still work</b> for everyone.</li>
+      </ul>
+    </div>
+    <div class="shot-wrap"><img class="shot" src="img/cashier-locked.png" alt="Dashboard locked for the cashier, NEXUS panel open with suggestions" style="object-position:60% 30%"></div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>12</span></div>
+</section>
+
+<!-- 13 Admin Studio -->
+<section class="slide dark">
+  <div class="eyebrow">Admin Studio</div>
+  <h2>Admins run NEXUS without a developer</h2>
+  <div class="cards c3" style="margin-top:34px">
+    <div class="card"><div class="ic" style="background:#2a2f5a">📚</div><h3>Knowledge</h3><p>List, upload files, write FAQs, see processing status, version history with activate and rollback, soft delete.</p></div>
+    <div class="card"><div class="ic" style="background:#2a2f5a">🤖</div><h3>Assistant</h3><p>Name, persona prompt, language, LLM and fallback, score threshold, accent colour, allowed origins, avatar frames with live preview.</p></div>
+    <div class="card"><div class="ic" style="background:#2a2f5a">💡</div><h3>Insights</h3><p>Knowledge gaps to resolve, thumbs-down answers, and an audit log filterable by action, outcome and date.</p></div>
+  </div>
+  <div class="cards c2" style="margin-top:18px">
+    <div class="card"><h3>Secure sign-in</h3><p>Supabase email login; only users listed as admins of that app get in.</p></div>
+    <div class="card"><h3>Every change audited</h3><p>Admin actions write the append-only audit log.</p></div>
+  </div>
+  <div class="foot"><span>Same dark-sidebar look as the POS demo</span><span>13</span></div>
+</section>
+
+<!-- 14 Security -->
+<section class="slide">
+  <div class="eyebrow">Security & guardrails</div>
+  <h2>Safe by construction, not by prompt</h2>
+  <div class="cards c3" style="margin-top:28px">
+    <div class="card"><h3>Signed identity</h3><p>RS256 JWT from the host, 10-minute TTL, verified per app via JWKS.</p></div>
+    <div class="card"><h3>Tenant isolation</h3><p>Retrieval always filters by app and active version; tools are registered per app.</p></div>
+    <div class="card"><h3>Locked database</h3><p>RLS on every table with no policies; only ai-service holds the service key.</p></div>
+    <div class="card"><h3>Append-only audit</h3><p>UPDATE and DELETE revoked and blocked by a trigger, even for the service role.</p></div>
+    <div class="card"><h3>Abuse limits</h3><p>CORS limited to allowed origins; 20 messages per minute per user.</p></div>
+    <div class="card"><h3>No secrets in the browser</h3><p>The widget holds no keys; Studio holds only the anon key.</p></div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>14</span></div>
+</section>
+
+<!-- 15 LLM + data -->
+<section class="slide">
+  <div class="eyebrow">Models & data</div>
+  <h2>Swap the model per app; keep the data in one place</h2>
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:28px;margin-top:30px">
+    <div class="card">
+      <h3>LLM gateway</h3>
+      <ul class="ticks" style="margin-top:12px">
+        <li><b>Claude</b> adapter for cloud use.</li>
+        <li><b>OpenAI-compatible</b> adapter for self-hosted models (LM Studio, Ollama, vLLM). The demo runs qwen2.5-7b-instruct locally.</li>
+        <li><b>Fallback</b> adapter on failure, after one retry.</li>
+        <li><b>Fake</b> adapter for deterministic tests.</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h3>Supabase</h3>
+      <ul class="ticks" style="margin-top:12px">
+        <li><b>Postgres + pgvector</b> with an HNSW index for chunks.</li>
+        <li><b>Storage</b> for knowledge files and avatar frames.</li>
+        <li><b>Conversations, feedback, gaps, audit</b> tables.</li>
+        <li><b>90-day</b> retention for conversations.</li>
+      </ul>
+    </div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>15</span></div>
+</section>
+
+<!-- 16 Testing -->
+<section class="slide">
+  <div class="eyebrow">Quality</div>
+  <h2>Tested at every layer</h2>
+  <div class="cards c4" style="margin-top:30px">
+    <div class="card"><div class="big">55</div><p style="margin-top:10px">widget tests: states, corner snap, 401 retry, style isolation</p></div>
+    <div class="card"><div class="big">29</div><p style="margin-top:10px">Studio unit tests</p></div>
+    <div class="card"><div class="big">E2E</div><p style="margin-top:10px">Playwright: owner gets the exact profit, cashier refused, knowledge cited</p></div>
+    <div class="card"><div class="big">≥90%</div><p style="margin-top:10px">eval target; 100% on numbers and refusals</p></div>
+  </div>
+  <div class="cards c3" style="margin-top:18px">
+    <div class="card"><h3>Unit</h3><p>Date ranges in 3 time zones, rupiah parser, guardrail, role check, chunker.</p></div>
+    <div class="card"><h3>Contract</h3><p>mock-pos responses and SSE events checked against shared zod schemas.</p></div>
+    <div class="card"><h3>Orchestrator</h3><p>Scripted fake LLM: tool loop, guardrail replace, POS timeout, fallback.</p></div>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>16</span></div>
+</section>
+
+<!-- 17 Next -->
+<section class="slide dark">
+  <div class="eyebrow">Next steps</div>
+  <h2>From pilot to production</h2>
+  <div class="cards c3" style="margin-top:34px">
+    <div class="card"><h3>Compliance</h3><p>Decide external LLM use, data region, and retention for conversations, audit and knowledge gaps.</p></div>
+    <div class="card"><h3>POS team</h3><p>Agree the profit definition (refunds, discounts, VAT, missing COGS) and provide a staging endpoint.</p></div>
+    <div class="card"><h3>Next tenants</h3><p>Core Banking and ERP/HRIS reuse the same widget and service with their own knowledge and tools.</p></div>
+  </div>
+  <div style="margin-top:auto;display:flex;align-items:center;gap:22px">
+    <img src="../../assets/avatar/pos/happy.webp" alt="" style="width:110px;height:110px;object-fit:contain">
+    <p style="font-size:24px;color:#e8ebf3">Thank you. Questions?</p>
+  </div>
+  <div class="foot"><span>NEXUS · Feature overview</span><span>17</span></div>
+</section>
+
+</body>
+</html>
