@@ -33,7 +33,8 @@ export default defineConfig({
     trace: "retain-on-failure",
     ...devices["Desktop Chrome"],
   },
-  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"] } }],
+  // The launcher breathes forever, so Playwright never sees it "stable"; reduced motion stops it (styles.css).
+  projects: [{ name: "chromium", use: { ...devices["Desktop Chrome"], contextOptions: { reducedMotion: "reduce" } } }],
   webServer: external ? undefined : [
     {
       name: "mock-pos",

@@ -11,8 +11,13 @@ const avatarActive = (page: Page, state: string): Locator =>
   page.locator(`ai-assistant .launcher img[data-state="${state}"][data-active]`);
 const assistantMessages = (page: Page) => page.locator("ai-assistant .msg.assistant");
 const userMessages = (page: Page) => page.locator("ai-assistant .msg.user");
+// The page also has a "Cashier" view tab, so role buttons are looked up inside their group.
+const roleButton = (page: Page, name: string) =>
+  page.getByRole("group", { name: "User role" }).getByRole("button", { name });
 
 async function openWidget(page: Page): Promise<void> {
+  // `next dev` draws its indicator bottom-left, on top of the bottom-left launcher.
+  await page.addStyleTag({ content: "nextjs-portal { display: none !important; }" });
   await expect(widget(page).locator(".launcher")).toBeVisible();
   await widget(page).locator(".launcher").click();
   await expect(widget(page).locator(".panel")).toBeVisible();
@@ -42,7 +47,7 @@ async function waitForAnswerDone(page: Page): Promise<Locator> {
 test.describe("POS pilot demo (/demo/pos)", () => {
   test.beforeEach(async ({ page }) => {
     await page.goto("/demo/pos");
-    await expect(page.getByRole("button", { name: "Owner" })).toHaveAttribute("aria-pressed", "true");
+    await expect(roleButton(page, "Owner")).toHaveAttribute("aria-pressed", "true");
     const mode = await widget(page).evaluate((el) => el.shadowRoot?.mode ?? null);
     expect(mode, "widget shadow root must be open").toBe("open");
   });
@@ -63,8 +68,8 @@ test.describe("POS pilot demo (/demo/pos)", () => {
     await openWidget(page);
     await widget(page).locator(".form input[type=text]").fill("draft");
 
-    await page.getByRole("button", { name: "Cashier" }).click();
-    await expect(page.getByRole("button", { name: "Cashier" })).toHaveAttribute("aria-pressed", "true");
+    await roleButton(page, "Cashier").click();
+    await expect(roleButton(page, "Cashier")).toHaveAttribute("aria-pressed", "true");
     // key={role}: a fresh <ai-assistant>, closed, with no conversation.
     await expect(widget(page)).toHaveCount(1);
     await expect(widget(page).locator(".panel")).toHaveCount(0);
