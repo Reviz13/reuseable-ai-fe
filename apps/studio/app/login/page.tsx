@@ -9,13 +9,22 @@ export default async function LoginPage({ searchParams }: { searchParams: Promis
   const { url, anonKey } = supabaseEnv();
   const denied = AppIdSchema.safeParse((await searchParams).denied);
   return (
-    <>
+    <div className="login-page ui">
+      <div className="login-brand">
+        <span className="sidebar-logo" aria-hidden>
+          ✦
+        </span>
+        <span>
+          <span className="sidebar-name">AI Studio</span>
+          <span className="sidebar-sub">Hitachi POS · NEXUS admin</span>
+        </span>
+      </div>
       {denied.success && (
         <p className="error login" role="alert">
           This account does not have access to {denied.data}
         </p>
       )}
       <LoginForm supabaseUrl={url} anonKey={anonKey} />
-    </>
+    </div>
   );
 }

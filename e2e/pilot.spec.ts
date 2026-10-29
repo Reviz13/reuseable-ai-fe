@@ -1,6 +1,6 @@
 import { resolve } from "node:path";
 import { expect, test, type Locator, type Page } from "@playwright/test";
-import { PROFIT_QUESTION, fetchThisWeekProfit, formatRupiah } from "./profit";
+import { PROFIT_QUESTION, fetchThisWeekProfit, rupiahPattern } from "./profit";
 
 const FORBIDDEN = "Only the owner can view profit.";
 const REFUND_QUESTION = "How do I refund a transaction?";
@@ -59,7 +59,7 @@ test.describe("POS pilot demo (/demo/pos)", () => {
     const answer = await waitForAnswerDone(page);
     await happy;
     const { profit } = await fetchThisWeekProfit();
-    await expect(answer).toContainText(formatRupiah(profit));
+    await expect(answer).toContainText(rupiahPattern(profit));
     await expect(answer).not.toContainText(FORBIDDEN);
   });
 

@@ -24,7 +24,12 @@ export default async function InsightsPage({
 
   return (
     <>
-      <h1>Insights</h1>
+      <header className="page-head">
+        <div>
+          <h1>Insights</h1>
+          <p>What users ask, what NEXUS could not answer, and how answers were rated.</p>
+        </div>
+      </header>
       <nav className="tabs">
         {[
           ["gaps", "Knowledge gaps"],

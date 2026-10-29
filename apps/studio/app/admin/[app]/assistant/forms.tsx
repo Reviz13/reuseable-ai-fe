@@ -9,7 +9,7 @@ import type { AssistantAdminSchema } from "@/lib/schemas";
 import { saveAssistant, uploadAvatar } from "./actions";
 
 const EMPTY: FormState = {};
-export const STATES = AvatarStateSchema.options;
+const STATES = AvatarStateSchema.options;
 
 export function ConfigForm({ app, config }: { app: string; config: z.input<typeof AssistantAdminSchema> }) {
   const [state, action, pending] = useActionState(saveAssistant.bind(null, app), EMPTY);

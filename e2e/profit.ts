@@ -27,6 +27,15 @@ export function formatRupiah(n: number): string {
   return `${n < 0 && r !== 0 ? "-" : ""}Rp${String(r).replace(/\B(?=(\d{3})+(?!\d))/g, ".")}`;
 }
 
+/**
+ * Matches an amount however the answer writes it: "Rp3.482.000" (id), "Rp3,482,000" (en), or a live model's
+ * "Rp 3,482,000" / "IDR 3,482,000". The digits must be exact.
+ */
+export function rupiahPattern(n: number): RegExp {
+  const groups = String(Math.round(Math.abs(n))).replace(/\B(?=(\d{3})+(?!\d))/g, " ").split(" ");
+  return new RegExp(`${n < 0 ? "-" : ""}(?:Rp|IDR)\\s?${groups.join("[.,]")}(?!\\d)`);
+}
+
 /** Profit straight from mock-pos for the resolved this_week range. */
 export async function fetchThisWeekProfit(): Promise<{ profit: number; from: string; to: string }> {
   const { from, to } = thisWeekJakarta();

@@ -35,7 +35,8 @@ export function LoginForm({ supabaseUrl, anonKey }: { supabaseUrl: string; anonK
 
   return (
     <main className="login card">
-      <h1>Sign in to AI Studio</h1>
+      <h1>Welcome back</h1>
+      <p className="lead">Sign in to manage NEXUS knowledge and settings.</p>
       <form onSubmit={onSubmit}>
         <label htmlFor="email">Email</label>
         <input id="email" name="email" type="email" required autoComplete="username" />

@@ -14,7 +14,12 @@ export default async function KnowledgePage({ params }: { params: Promise<{ app:
   return (
     <>
       <AutoRefresh active={processing} />
-      <h1>Knowledge</h1>
+      <header className="page-head">
+        <div>
+          <h1>Knowledge</h1>
+          <p>Documents and FAQs that NEXUS answers from.</p>
+        </div>
+      </header>
       <div className="card table-wrap">
         {docs.length === 0 ? (
           <p className="muted">No documents yet.</p>

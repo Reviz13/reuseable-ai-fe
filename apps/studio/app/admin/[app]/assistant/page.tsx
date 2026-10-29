@@ -1,8 +1,12 @@
+import { AvatarStateSchema } from "@ai/contracts";
 import { aiAdmin } from "@/lib/aiAdmin";
 import { aiServiceUrl } from "@/lib/env";
 import { parseApp } from "@/lib/guard";
 import { AssistantAdminSchema, PublicAssistantLooseSchema } from "@/lib/schemas";
-import { AvatarPreview, AvatarSlot, ConfigForm, STATES } from "./forms";
+import { AvatarPreview, AvatarSlot, ConfigForm } from "./forms";
+
+// Read from contracts, not from ./forms: a "use client" module only hands a server page client references.
+const STATES = AvatarStateSchema.options;
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +29,12 @@ export default async function AssistantPage({ params }: { params: Promise<{ app:
 
   return (
     <>
-      <h1>Assistant</h1>
+      <header className="page-head">
+        <div>
+          <h1>Assistant</h1>
+          <p>Name, persona, colours and avatar of the widget.</p>
+        </div>
+      </header>
       <div className="grid2">
         <section className="card">
           <h2>Configuration</h2>

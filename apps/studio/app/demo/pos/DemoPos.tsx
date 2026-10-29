@@ -2,6 +2,7 @@
 
 import Script from "next/script";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Sidebar, SidebarBrand } from "@/components/Sidebar";
 import { Dashboard } from "./Dashboard";
 import s from "./pos.module.css";
 
@@ -157,210 +158,231 @@ export function DemoPos({ aiServiceUrl }: { aiServiceUrl: string }) {
   const count = (c: Cat | "all") => (c === "all" ? PRODUCTS.length : PRODUCTS.filter((p) => p.cat === c).length);
 
   return (
-    <div className={s.page}>
-      <header className={s.header}>
-        <div className={s.brand}>
-          <span className={s.logo} aria-hidden>
-            ☕
-          </span>
-          <div>
-            <div className={s.brandName}>Kopi Tepi POS</div>
-            <div className={s.brandSub}>
-              {now ? now.toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }) : " "}
-            </div>
-          </div>
-        </div>
-        <nav className={s.views} aria-label="Pages">
-          {(["kasir", "dashboard"] as const).map((v) => (
-            <button key={v} type="button" className={s.view} aria-pressed={view === v} onClick={() => {
-                setView(v);
-                // The dashboard keeps its range in the URL; the cashier view has none.
-                if (v === "kasir") window.history.replaceState(null, "", window.location.pathname);
-              }}>
-              {v === "kasir" ? "🧾 Cashier" : "📊 Dashboard"}
-            </button>
-          ))}
-        </nav>
-        <div className={s.headRight}>
-          <span className={s.session}>
-            This session: <strong>{session.count}</strong> transactions · <strong>{rupiah(session.revenue)}</strong>
-          </span>
-          <div role="group" aria-label="User role" className={s.roles}>
-            <span className={s.roleLabel}>Signed in as</span>
+    <div className={`app ${s.page}`}>
+      <Sidebar brand={<SidebarBrand logo="☕" name="Kopi Tepi" sub="Hitachi POS · Outlet 01" />}>
+        {/* Up top: an open NEXUS panel (bottom-left) covers the sidebar foot. */}
+        <div role="group" aria-label="User role" className="side-card">
+          <div className="side-card-label">Signed in as</div>
+          <div className={s.roles}>
             {(["owner", "cashier"] as const).map((r) => (
               <button key={r} type="button" className={s.role} aria-pressed={role === r} onClick={() => setRole(r)}>
                 {r === "owner" ? "Owner" : "Cashier"}
               </button>
             ))}
           </div>
+        </div>
+        <div className="sidebar-section">Outlet</div>
+        <nav className="sidebar-nav" aria-label="Pages">
+          {(["kasir", "dashboard"] as const).map((v) => (
+            <button
+              key={v}
+              type="button"
+              className="nav-item"
+              aria-current={view === v ? "page" : undefined}
+              onClick={() => {
+                setView(v);
+                // The dashboard keeps its range in the URL; the cashier view has none.
+                if (v === "kasir") window.history.replaceState(null, "", window.location.pathname);
+              }}
+            >
+              <span className="nav-icon" aria-hidden>
+                {v === "kasir" ? "🧾" : "📊"}
+              </span>
+              {v === "kasir" ? "Cashier" : "Dashboard"}
+            </button>
+          ))}
+        </nav>
+        <div className="sidebar-foot">
+          <div className="side-card">
+            <div className="side-card-label">This session</div>
+            <div className={s.sessionStats}>
+              <span>
+                <strong>{session.count}</strong> transactions
+              </span>
+              <strong>{rupiah(session.revenue)}</strong>
+            </div>
+          </div>
           <button type="button" className={s.askAi} onClick={() => askAi()}>
             ✨ Ask NEXUS
           </button>
         </div>
-      </header>
+      </Sidebar>
 
-      {view === "kasir" ? (
-        <div className={s.layout}>
-          <main>
-            <div className={s.tools}>
-              <input
-                className={s.search}
-                type="search"
-                placeholder="Search menu…"
-                aria-label="Search menu"
-                value={query}
-                onChange={(e) => setQuery(e.target.value)}
-              />
-              <div className={s.tabs} role="group" aria-label="Categories">
-                {(["all", "kopi", "nonkopi", "makanan"] as const).map((c) => (
-                  <button key={c} type="button" className={s.tab} aria-pressed={cat === c} onClick={() => setCat(c)}>
-                    {c === "all" ? "All" : CAT_STYLE[c].label}
-                    <span className={s.tabCount}>{count(c)}</span>
-                  </button>
-                ))}
-              </div>
-            </div>
-
-            {visible.length === 0 ? (
-              <p className={s.empty}>No menu item matches &ldquo;{query}&rdquo;.</p>
-            ) : (
-              <ul className={s.grid}>
-                {visible.map((p) => {
-                  const qty = qtyOf(p.id);
-                  const popped = bump?.id === p.id;
-                  return (
-                    <li key={p.id}>
-                      <button
-                        type="button"
-                        className={`${s.product} ${qty ? s.inCart : ""}`}
-                        onClick={() => add(p.id)}
-                        aria-label={`Add ${p.name}, ${rupiah(p.price)}${qty ? `, ${qty} in cart` : ""}`}
-                      >
-                        {qty > 0 && (
-                          <span key={popped ? bump!.n : 0} className={s.badge} aria-hidden>
-                            {qty}
-                          </span>
-                        )}
-                        <span
-                          key={popped ? `e${bump!.n}` : "e"}
-                          className={`${s.emoji} ${popped ? s.pop : ""}`}
-                          style={{ background: CAT_STYLE[p.cat].bg }}
-                          aria-hidden
-                        >
-                          {p.emoji}
-                        </span>
-                        <span className={s.cat} style={{ background: CAT_STYLE[p.cat].bg, color: CAT_STYLE[p.cat].ink }}>
-                          {CAT_STYLE[p.cat].label}
-                        </span>
-                        <span className={s.name}>{p.name}</span>
-                        <span className={s.price}>{rupiah(p.price)}</span>
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-          </main>
-
-          <aside className={s.cart} aria-label="Cart">
-            <div className={s.cartHead}>
-              <h2 className={s.cartTitle}>Order</h2>
-              <span className={s.order}>#{order}</span>
-            </div>
-            {cart.length === 0 ? (
-              <div className={s.cartEmpty}>
-                <span className={s.cartEmptyIcon} aria-hidden>
-                  🛒
+      <div className="main">
+        {view === "kasir" ? (
+          <div className={s.layout}>
+            <main>
+              <header className={s.pageHead}>
+                <div>
+                  <h1 className={s.pageTitle}>New order</h1>
+                  <p className={s.pageSub}>
+                    {now ? now.toLocaleString("en-GB", { weekday: "long", day: "numeric", month: "long", hour: "2-digit", minute: "2-digit" }) : " "}
+                  </p>
+                </div>
+                <span className={s.open}>
+                  <i aria-hidden /> Outlet open
                 </span>
-                <span>The cart is empty. Tap a menu item to add it.</span>
-              </div>
-            ) : (
-              <ul className={s.lines}>
-                {cart.map((l) => {
-                  const p = BY_ID.get(l.id)!;
-                  return (
-                    <li key={l.id} className={s.line}>
-                      <span className={s.lineName}>{p.name}</span>
-                      <span className={s.lineTotal}>{rupiah(p.price * l.qty)}</span>
-                      <span className={s.qty}>
-                        <button type="button" className={s.qtyBtn} aria-label={`Remove one ${p.name}`} onClick={() => setQty(l.id, l.qty - 1)}>
-                          −
-                        </button>
-                        <span className={s.qtyN}>{l.qty}</span>
-                        <button type="button" className={s.qtyBtn} aria-label={`Add one ${p.name}`} onClick={() => setQty(l.id, l.qty + 1)}>
-                          +
-                        </button>
-                      </span>
-                      <button type="button" className={s.remove} onClick={() => setQty(l.id, 0)}>
-                        Remove
-                      </button>
-                    </li>
-                  );
-                })}
-              </ul>
-            )}
-
-            <div className={s.summary}>
-              <div className={s.row}>
-                <span>Subtotal</span>
-                <span>{rupiah(subtotal)}</span>
-              </div>
-              <div className={s.row}>
-                <span>VAT 11%</span>
-                <span>{rupiah(tax)}</span>
-              </div>
-              <div className={`${s.row} ${s.total}`}>
-                <span>Total</span>
-                <span>{rupiah(shownTotal)}</span>
-              </div>
-            </div>
-
-            <div className={s.pay}>
-              <div className={s.methods} role="group" aria-label="Payment method">
-                <button type="button" className={s.method} aria-pressed={method === "cash"} onClick={() => setMethod("cash")}>
-                  💵 Cash
-                </button>
-                <button type="button" className={s.method} aria-pressed={method === "qris"} onClick={() => setMethod("qris")}>
-                  📱 QRIS
-                </button>
-              </div>
-              {method === "cash" && (
-                <>
-                  <div className={s.quick}>
-                    <button type="button" className={s.quickBtn} onClick={() => setCashText(String(total))} disabled={!total}>
-                      Exact amount
+              </header>
+              <div className={s.tools}>
+                <input
+                  className={s.search}
+                  type="search"
+                  placeholder="Search menu…"
+                  aria-label="Search menu"
+                  value={query}
+                  onChange={(e) => setQuery(e.target.value)}
+                />
+                <div className={s.tabs} role="group" aria-label="Categories">
+                  {(["all", "kopi", "nonkopi", "makanan"] as const).map((c) => (
+                    <button key={c} type="button" className={s.tab} aria-pressed={cat === c} onClick={() => setCat(c)}>
+                      {c === "all" ? "All" : CAT_STYLE[c].label}
+                      <span className={s.tabCount}>{count(c)}</span>
                     </button>
-                    {QUICK_CASH.map((v) => (
-                      <button key={v} type="button" className={s.quickBtn} onClick={() => setCashText(String(v))}>
-                        {rupiah(v)}
-                      </button>
-                    ))}
-                  </div>
-                  <input
-                    className={s.cash}
-                    inputMode="numeric"
-                    placeholder="Cash received"
-                    aria-label="Cash received"
-                    value={cash ? cash.toLocaleString("en-US") : ""}
-                    onChange={(e) => setCashText(e.target.value)}
-                  />
-                  {cash > 0 && total > 0 && (
-                    <div className={`${s.change} ${cash < total ? s.short : ""}`}>
-                      {cash < total ? "Short by " : "Change "}
-                      <strong>{rupiah(Math.abs(cash - total))}</strong>
-                    </div>
-                  )}
-                </>
+                  ))}
+                </div>
+              </div>
+
+              {visible.length === 0 ? (
+                <p className={s.empty}>No menu item matches &ldquo;{query}&rdquo;.</p>
+              ) : (
+                <ul className={s.grid}>
+                  {visible.map((p) => {
+                    const qty = qtyOf(p.id);
+                    const popped = bump?.id === p.id;
+                    return (
+                      <li key={p.id}>
+                        <button
+                          type="button"
+                          className={`${s.product} ${qty ? s.inCart : ""}`}
+                          onClick={() => add(p.id)}
+                          aria-label={`Add ${p.name}, ${rupiah(p.price)}${qty ? `, ${qty} in cart` : ""}`}
+                        >
+                          {qty > 0 && (
+                            <span key={popped ? bump!.n : 0} className={s.badge} aria-hidden>
+                              {qty}
+                            </span>
+                          )}
+                          <span
+                            key={popped ? `e${bump!.n}` : "e"}
+                            className={`${s.emoji} ${popped ? s.pop : ""}`}
+                            style={{ background: CAT_STYLE[p.cat].bg }}
+                            aria-hidden
+                          >
+                            {p.emoji}
+                          </span>
+                          <span className={s.cat} style={{ background: CAT_STYLE[p.cat].bg, color: CAT_STYLE[p.cat].ink }}>
+                            {CAT_STYLE[p.cat].label}
+                          </span>
+                          <span className={s.name}>{p.name}</span>
+                          <span className={s.price}>{rupiah(p.price)}</span>
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
               )}
-              <button type="button" className={s.payBtn} disabled={!canPay} onClick={pay}>
-                Pay {total > 0 ? rupiah(total) : ""}
-              </button>
-            </div>
-          </aside>
-        </div>
-      ) : (
-        <Dashboard role={role} onAsk={(q) => askAi(q)} />
-      )}
+            </main>
+
+            <aside className={s.cart} aria-label="Cart">
+              <div className={s.cartHead}>
+                <h2 className={s.cartTitle}>Order</h2>
+                <span className={s.order}>#{order}</span>
+              </div>
+              {cart.length === 0 ? (
+                <div className={s.cartEmpty}>
+                  <span className={s.cartEmptyIcon} aria-hidden>
+                    🛒
+                  </span>
+                  <span>The cart is empty. Tap a menu item to add it.</span>
+                </div>
+              ) : (
+                <ul className={s.lines}>
+                  {cart.map((l) => {
+                    const p = BY_ID.get(l.id)!;
+                    return (
+                      <li key={l.id} className={s.line}>
+                        <span className={s.lineName}>{p.name}</span>
+                        <span className={s.lineTotal}>{rupiah(p.price * l.qty)}</span>
+                        <span className={s.qty}>
+                          <button type="button" className={s.qtyBtn} aria-label={`Remove one ${p.name}`} onClick={() => setQty(l.id, l.qty - 1)}>
+                            −
+                          </button>
+                          <span className={s.qtyN}>{l.qty}</span>
+                          <button type="button" className={s.qtyBtn} aria-label={`Add one ${p.name}`} onClick={() => setQty(l.id, l.qty + 1)}>
+                            +
+                          </button>
+                        </span>
+                        <button type="button" className={s.remove} onClick={() => setQty(l.id, 0)}>
+                          Remove
+                        </button>
+                      </li>
+                    );
+                  })}
+                </ul>
+              )}
+
+              <div className={s.summary}>
+                <div className={s.row}>
+                  <span>Subtotal</span>
+                  <span>{rupiah(subtotal)}</span>
+                </div>
+                <div className={s.row}>
+                  <span>VAT 11%</span>
+                  <span>{rupiah(tax)}</span>
+                </div>
+                <div className={`${s.row} ${s.total}`}>
+                  <span>Total</span>
+                  <span>{rupiah(shownTotal)}</span>
+                </div>
+              </div>
+
+              <div className={s.pay}>
+                <div className={s.methods} role="group" aria-label="Payment method">
+                  <button type="button" className={s.method} aria-pressed={method === "cash"} onClick={() => setMethod("cash")}>
+                    💵 Cash
+                  </button>
+                  <button type="button" className={s.method} aria-pressed={method === "qris"} onClick={() => setMethod("qris")}>
+                    📱 QRIS
+                  </button>
+                </div>
+                {method === "cash" && (
+                  <>
+                    <div className={s.quick}>
+                      <button type="button" className={s.quickBtn} onClick={() => setCashText(String(total))} disabled={!total}>
+                        Exact amount
+                      </button>
+                      {QUICK_CASH.map((v) => (
+                        <button key={v} type="button" className={s.quickBtn} onClick={() => setCashText(String(v))}>
+                          {rupiah(v)}
+                        </button>
+                      ))}
+                    </div>
+                    <input
+                      className={s.cash}
+                      inputMode="numeric"
+                      placeholder="Cash received"
+                      aria-label="Cash received"
+                      value={cash ? cash.toLocaleString("en-US") : ""}
+                      onChange={(e) => setCashText(e.target.value)}
+                    />
+                    {cash > 0 && total > 0 && (
+                      <div className={`${s.change} ${cash < total ? s.short : ""}`}>
+                        {cash < total ? "Short by " : "Change "}
+                        <strong>{rupiah(Math.abs(cash - total))}</strong>
+                      </div>
+                    )}
+                  </>
+                )}
+                <button type="button" className={s.payBtn} disabled={!canPay} onClick={pay}>
+                  Pay {total > 0 ? rupiah(total) : ""}
+                </button>
+              </div>
+            </aside>
+          </div>
+        ) : (
+          <Dashboard role={role} onAsk={(q) => askAi(q)} />
+        )}
+      </div>
 
       {paid && (
         <div
