@@ -225,7 +225,7 @@ Ingestion is asynchronous inside ai-service: upload, then `processing`, then par
 ```
 
 - **Attributes:** `app`, `api`, `position` (`top-left|top-right|bottom-left|bottom-right`), `open`, `lang`.
-- **Host CSS vars:** `--ai-inset-x`, `--ai-inset-y`, `--ai-z`, `--ai-accent`.
+- **Host CSS vars:** `--ai-inset-x` (or per side `--ai-inset-left` / `--ai-inset-right`), `--ai-inset-y`, `--ai-z`, `--ai-accent`.
 - **Methods:** `open()`, `close()`, `ask(text)`.
 - **Events:** `ai-open`, `ai-close`, `ai-message`, `ai-error`.
 - On mount: `GET /v1/assistants/:app/public` returns `{ name, theme, avatar_frames }`. All frames are preloaded.

@@ -23,10 +23,10 @@
   font: 14px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   color: var(--ink);
 }
-.root.bottom-right { right: var(--ai-inset-x, 20px); bottom: var(--ai-inset-y, 20px); flex-direction: column; align-items: flex-end; }
-.root.bottom-left { left: var(--ai-inset-x, 20px); bottom: var(--ai-inset-y, 20px); flex-direction: column; align-items: flex-start; }
-.root.top-right { right: var(--ai-inset-x, 20px); top: var(--ai-inset-y, 20px); flex-direction: column-reverse; align-items: flex-end; }
-.root.top-left { left: var(--ai-inset-x, 20px); top: var(--ai-inset-y, 20px); flex-direction: column-reverse; align-items: flex-start; }
+.root.bottom-right { right: var(--ai-inset-right, var(--ai-inset-x, 20px)); bottom: var(--ai-inset-y, 20px); flex-direction: column; align-items: flex-end; }
+.root.bottom-left { left: var(--ai-inset-left, var(--ai-inset-x, 20px)); bottom: var(--ai-inset-y, 20px); flex-direction: column; align-items: flex-start; }
+.root.top-right { right: var(--ai-inset-right, var(--ai-inset-x, 20px)); top: var(--ai-inset-y, 20px); flex-direction: column-reverse; align-items: flex-end; }
+.root.top-left { left: var(--ai-inset-left, var(--ai-inset-x, 20px)); top: var(--ai-inset-y, 20px); flex-direction: column-reverse; align-items: flex-start; }
 .root.dragging { user-select: none; }
 .root.dragging .launcher { cursor: grabbing; animation: none; }
 
@@ -110,7 +110,7 @@ button { font: inherit; color: inherit; }
   display: flex;
   flex-direction: column;
   width: 380px;
-  max-width: calc(100vw - 2 * var(--ai-inset-x, 20px));
+  max-width: calc(100vw - var(--ai-inset-left, var(--ai-inset-x, 20px)) - var(--ai-inset-right, var(--ai-inset-x, 20px)));
   height: 560px;
   max-height: calc(100vh - 120px);
   background: var(--paper);

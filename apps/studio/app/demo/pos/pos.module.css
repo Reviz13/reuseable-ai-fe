@@ -9,10 +9,10 @@
   background: var(--bg);
   color: var(--ink);
 }
-/* NEXUS sits bottom-left just past the sidebar, so its open panel never covers the sidebar menu.
-   --ai-inset-x is the widget's own inset variable; it inherits into the shadow root. */
+/* NEXUS keeps clear of the sidebar on the left corners only; the right corners stay at the edge.
+   --ai-inset-left is the widget's own inset variable; it inherits into the shadow root. */
 @media (min-width: 901px) {
-  .page :global(ai-assistant) { --ai-inset-x: calc(var(--sidebar-w) + 20px); }
+  .page :global(ai-assistant) { --ai-inset-left: calc(var(--sidebar-w) + 20px); }
 }
 
 /* ---------- Sidebar pieces ---------- */
